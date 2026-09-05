@@ -715,7 +715,6 @@ export default function App() {
     <div className="page">
       <div className="aurora" aria-hidden="true" />
       <header>
-        <img className="brand-wordmark" src="/wordmark.png" alt="assert" />
         <ConnectButton />
       </header>
 
@@ -729,19 +728,37 @@ export default function App() {
                 stake money on your own goals. a friend referees the truth. hit the deadline and
                 it's yours — miss it and they take it home. enforced by code on base, no excuses.
               </p>
-              <div className="fade-up fade-up-3">
-                <ConnectButton label="connect wallet to start" />
-              </div>
             </div>
           </section>
 
-          <div className="landing-card fade-up fade-up-4">
-            <div className="section-head">
-              <h2 className="section-title">top asserts</h2>
-              <span className="section-sub muted">live · biggest pots on-chain</span>
+          <div className="landing-card receipt-card fade-up fade-up-4">
+            <div>
+              <span className="eyebrow">how it hits</span>
+              <h2 className="section-title">one promise. one referee. real money.</h2>
             </div>
-            <div style={{ marginTop: 14 }}>
-              <TopAsserts goals={allGoals} limit={5} seeded />
+            <div className="receipt-stack">
+              <div className="receipt-line">
+                <span>you assert</span>
+                <b>“no junk food for 30 days”</b>
+              </div>
+              <div className="receipt-line">
+                <span>you stake</span>
+                <b>0.50 ETH</b>
+              </div>
+              <div className="receipt-line">
+                <span>they judge</span>
+                <b>friend accepts referee role</b>
+              </div>
+              <div className="receipt-split">
+                <div>
+                  <span>hit it</span>
+                  <b>refund returns to you</b>
+                </div>
+                <div>
+                  <span>fold</span>
+                  <b>referee gets paid</b>
+                </div>
+              </div>
             </div>
           </div>
 
