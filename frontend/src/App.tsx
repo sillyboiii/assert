@@ -1189,12 +1189,13 @@ const LANDING_ACTIVITY = [
 
 function LandingActivity() {
   return (
-    <section id="people" className="landing-panel landing-activity fade-up fade-up-3" aria-label="recent assert activity">
-      <div className="section-head clean">
+    <section id="people" className="landing-activity fade-up fade-up-3" aria-label="recent assert activity">
+      <div className="feed-heading">
         <h2 className="section-title">people are asserting</h2>
+        <p>live promises, wins, and folds from inside Assert.</p>
       </div>
-      {LANDING_ACTIVITY.map((item) => (
-        <div className={`activity-row static ${item.badge.toLowerCase()}`} key={`${item.who}-${item.body}`}>
+      {LANDING_ACTIVITY.map((item, index) => (
+        <div className={`activity-row static floating-row row-${index + 1} ${item.badge.toLowerCase()}`} key={`${item.who}-${item.body}`}>
           <div className="avatar">{item.who[0]}</div>
           <div>
             <p><b>{item.who}</b> <strong>{item.body}</strong></p>
@@ -1212,6 +1213,11 @@ function LandingFinalCta() {
     <section className="landing-final fade-up fade-up-4">
       <h2>you still just gonna say you'll do it?</h2>
       <ConnectButton label="Assert it →" />
+      <div className="landing-footer">
+        <span>Assert</span>
+        <span>built on Base</span>
+        <a href="https://base.org" target="_blank" rel="noreferrer">base.org</a>
+      </div>
     </section>
   );
 }
@@ -1304,11 +1310,7 @@ export default function App() {
         </main>
       )}
 
-      <footer className="muted">
-        <span>Assert</span>
-        <span>built on Base</span>
-        <a href="https://base.org" target="_blank" rel="noreferrer">base.org</a>
-      </footer>
+      {isConnected ? <footer className="muted">assert — on your honor, onchain.</footer> : null}
     </div>
   );
 }
