@@ -808,6 +808,21 @@ function ProfileTab({ myGoals }: { myGoals: CreatedArgs[] }) {
   );
 }
 
+function ActiveMiniCard({ goal, isExample }: { goal: CreatedArgs; isExample: boolean }) {
+  const cd = useCountdown(goal.deadline);
+  return (
+    <button className="active-mini-card">
+      <span className="mini-label">{isExample ? 'example' : 'live'}</span>
+      <h3>{goal.goalText}</h3>
+      <p>{isExample ? `Josh gets your ${fmt(goal.amount)} ETH if you bail.` : `${short(goal.referee)} is watching`}</p>
+      <div className="mini-foot">
+        <b>{fmt(goal.amount)} ETH</b>
+        <span>{cd.expired ? 'done' : cd.out}</span>
+      </div>
+    </button>
+  );
+}
+
 function DisciplineHome({
   allGoals,
   myGoals,
@@ -856,20 +871,7 @@ function DisciplineHome({
           <span className="section-sub muted">what’s currently at risk</span>
         </div>
         <div className="active-scroll">
-          {displayGoals.map((g) => {
-            const cd = useCountdown(g.deadline);
-            return (
-              <button className="active-mini-card" key={g.id.toString()}>
-                <span className="mini-label">{myGoals.length ? 'live' : 'example'}</span>
-                <h3>{g.goalText}</h3>
-                <p>{myGoals.length ? `${short(g.referee)} is watching` : `Josh gets your ${fmt(g.amount)} ETH if you bail.`}</p>
-                <div className="mini-foot">
-                  <b>{fmt(g.amount)} ETH</b>
-                  <span>{cd.expired ? 'done' : cd.out}</span>
-                </div>
-              </button>
-            );
-          })}
+          {displayGoals.map((g) => <ActiveMiniCard key={g.id.toString()} goal={g} isExample={!myGoals.length} />)}
         </div>
       </section>
 
@@ -1113,33 +1115,34 @@ const SAMPLE_ASSERTS: CreatedArgs[] = [
   { id: 5n, creator: '0x48665B930a1c3DcE69C9D2d1d58E97f13F5F0c1', referee: '0x8Ba1f109551bD432803012645Ac136ddd64DBA72', goalText: 'no doomscrolling before noon', amount: parseUnits('0.1', 18), deadline: BigInt(Math.floor(Date.now() / 1000) + 18 * 86400) },
 ].map((g, i) => ({ ...g, id: BigInt(9000 + i) })) as CreatedArgs[];
 
+function TopAssertRow({ goal, rank, seeded }: { goal: CreatedArgs; rank: number; seeded: boolean }) {
+  const cd = useCountdown(goal.deadline);
+  return (
+    <div className="feed-row fade-up-1">
+      <span className={`feed-rank${rank < 3 ? ' top' : ''}`}>
+        {['🥇', '🥈', '🥉'][rank] ?? `#${rank + 1}`}
+      </span>
+      <div className="feed-main">
+        <div className="feed-goal">{goal.goalText}</div>
+        <div className="feed-meta">
+          {seeded ? 'someone on base' : short(goal.creator)} → vs {seeded ? 'their referee' : short(goal.referee)}
+        </div>
+      </div>
+      <span className="feed-amount">{fmt(goal.amount)} ETH</span>
+      <span className={`feed-countdown${cd.urgent && !cd.expired ? ' urgent' : ''}`}>
+        {cd.expired ? 'done' : cd.out}
+      </span>
+    </div>
+  );
+}
+
 function TopAsserts({ goals, limit = 8, seeded = false }: { goals?: CreatedArgs[]; limit?: number; seeded?: boolean }) {
   const src = goals && goals.length ? goals : SAMPLE_ASSERTS;
   const sorted = useMemo(() => [...src].sort((a, b) => (a.amount < b.amount ? 1 : -1)), [src]);
   const rows = sorted.slice(0, limit);
   return (
     <div className="feed-list">
-      {rows.map((g, i) => {
-        const cd = useCountdown(g.deadline);
-        return (
-          <div className="feed-row fade-up-1" key={g.id.toString()}>
-            <span className={`feed-rank${i < 3 ? ' top' : ''}`}>
-              {['🥇', '🥈', '🥉'][i] ?? `#${i + 1}`}
-            </span>
-            <div className="feed-main">
-              <div className="feed-goal">{g.goalText}</div>
-              <div className="feed-meta">
-                {seeded && !goals?.length ? 'someone on base' : short(g.creator)} → vs{' '}
-                {seeded && !goals?.length ? 'their referee' : short(g.referee)}
-              </div>
-            </div>
-            <span className="feed-amount">{fmt(g.amount)} ETH</span>
-            <span className={`feed-countdown${cd.urgent && !cd.expired ? ' urgent' : ''}`}>
-              {cd.expired ? 'done' : cd.out}
-            </span>
-          </div>
-        );
-      })}
+      {rows.map((g, i) => <TopAssertRow key={g.id.toString()} goal={g} rank={i} seeded={seeded && !goals?.length} />)}
     </div>
   );
 }
@@ -1147,20 +1150,86 @@ function TopAsserts({ goals, limit = 8, seeded = false }: { goals?: CreatedArgs[
 /* ---------------- landing ---------------- */
 
 function HowItWorks() {
-  const steps = [
-    { n: '01', title: 'you stake', body: 'lock real eth on a goal that actually matters to you.' },
-    { n: '02', title: 'a friend referees', body: 'they accept the role and verify the truth when the clock runs out.' },
-    { n: '03', title: 'the deadline decides', body: 'hit it, your stake comes back. miss it, your friend takes the pot.' },
-  ];
   return (
-    <section className="steps" aria-label="how it works">
-      {steps.map((s, i) => (
-        <div className={`step fade-up-${(i % 4) + 1}`} key={s.n}>
-          <span className="step-num">{s.n}</span>
-          <h3>{s.title}</h3>
-          <p>{s.body}</p>
+    <section className="how-compact fade-up fade-up-1" aria-label="how it works">
+      <span className="eyebrow">how it works</span>
+      <div className="how-chain">
+        <b>Say it</b>
+        <span>→</span>
+        <b>Stake it</b>
+        <span>→</span>
+        <b>Prove it</b>
+      </div>
+      <p>one promise, real money, one friend watching the truth.</p>
+    </section>
+  );
+}
+
+function LandingAssertCard() {
+  return (
+    <section className="landing-phone fade-up fade-up-2" aria-label="example assert">
+      <div className="landing-phone-top">
+        <span className="assert-pill live">LIVE</span>
+        <b>0.50 ETH</b>
+      </div>
+      <h2>Gym 4x this week</h2>
+      <div className="landing-progress" aria-hidden="true">
+        <span />
+      </div>
+      <div className="landing-metrics">
+        <div><span>referee</span><b>Josh</b></div>
+        <div><span>progress</span><b>3 / 4</b></div>
+        <div><span>left</span><b>22h</b></div>
+      </div>
+      <div className="landing-fold-copy">fold and Josh gets your 0.5 ETH.</div>
+    </section>
+  );
+}
+
+function LandingActivity() {
+  return (
+    <section className="landing-panel landing-activity fade-up fade-up-3" aria-label="recent assert activity">
+      <div className="section-head clean">
+        <h2 className="section-title">people are asserting</h2>
+      </div>
+      <div className="activity-row static">
+        <div className="avatar">J</div>
+        <div>
+          <p><b>Josh</b> completed <strong>Gym 4x this week</strong></p>
+          <span>Mia approved it · 20m ago</span>
         </div>
-      ))}
+        <div className="activity-side"><b>WON</b></div>
+      </div>
+      <div className="activity-row static">
+        <div className="avatar">M</div>
+        <div>
+          <p><b>Mia</b> put <strong>0.03 ETH on reading daily</strong></p>
+          <span>deadline in 7 days</span>
+        </div>
+        <div className="activity-side"><b>LIVE</b></div>
+      </div>
+    </section>
+  );
+}
+
+function LandingConsequence() {
+  return (
+    <section className="landing-consequence fade-up fade-up-4">
+      <h2>talk is free. folding isn't.</h2>
+      <div className="consequence-grid">
+        <div className="consequence-card win"><span>YOU WIN</span><b>stake comes back</b></div>
+        <div className="consequence-card lose"><span>YOU FOLD</span><b>friend gets paid</b></div>
+      </div>
+    </section>
+  );
+}
+
+function LandingFinalCta() {
+  return (
+    <section className="landing-final fade-up fade-up-4">
+      <h2>still sure you're gonna do it?</h2>
+      <ConnectButton label="+ Create an assert" />
+      <p>back yourself.</p>
     </section>
   );
 }
@@ -1188,22 +1257,30 @@ export default function App() {
   return (
     <div className="page">
       <div className="aurora" aria-hidden="true" />
-      <header>{!isConnected ? <ConnectButton /> : null}</header>
+      <header />
 
       {!isConnected ? (
         <>
-          <section className="hero">
-            <div className="hero-inner">
-              <img className="hero-wordmark fade-up" src="/wordmark.png" alt="assert" />
-              <h1 className="fade-up fade-up-1">assert it, or fold.</h1>
-              <p className="lead fade-up fade-up-2">
-                stake money on your own goals. a friend referees the truth. hit the deadline and
-                it's yours — miss it and they take it home. enforced by code on base, no excuses.
-              </p>
+          <section className="hero landing-hero">
+            <div className="hero-inner landing-hero-inner">
+              <div className="landing-copy">
+                <img className="hero-wordmark fade-up" src="/wordmark.png" alt="assert" />
+                <h1 className="fade-up fade-up-1">assert it, or fold.</h1>
+                <p className="lead fade-up fade-up-2">
+                  Put money behind your word. Hit the goal, keep it. Bail, your friend gets paid.
+                </p>
+                <ConnectButton label="Create an assert" />
+              </div>
+              <LandingAssertCard />
             </div>
           </section>
 
-          <HowItWorks />
+          <main className="landing-main">
+            <HowItWorks />
+            <LandingActivity />
+            <LandingConsequence />
+            <LandingFinalCta />
+          </main>
         </>
       ) : (
         <main>
