@@ -205,29 +205,34 @@ function Step1Goal({
       </div>
       <label>
         your assert
-        <textarea
-          className="goal-input"
-          name="goal"
-          maxLength={280}
-          rows={3}
-          placeholder="train 4x a week for 30 days…"
-          value={goal}
-          onChange={(e) => setGoal(e.target.value)}
-          autoFocus
-        />
+        <div className="textarea-shell">
+          <textarea
+            className="goal-input"
+            name="goal"
+            maxLength={280}
+            rows={3}
+            placeholder="train 4x a week for 30 days…"
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            autoFocus
+          />
+          <span className="char-count">{goal.length}/280</span>
+        </div>
       </label>
-      <p className="char-count">{goal.length}/280</p>
       <label className="proof-label">
         proof standard
-        <textarea
-          className="goal-input proof-input"
-          name="proof"
-          maxLength={180}
-          rows={2}
-          placeholder="what evidence should your referee expect?"
-          value={proof}
-          onChange={(e) => setProof(e.target.value)}
-        />
+        <div className="textarea-shell">
+          <textarea
+            className="goal-input proof-input"
+            name="proof"
+            maxLength={180}
+            rows={2}
+            placeholder="what evidence should your referee expect?"
+            value={proof}
+            onChange={(e) => setProof(e.target.value)}
+          />
+          <span className="char-count">{proof.length}/180</span>
+        </div>
       </label>
       <div className="template-grid">
         {ASSERT_TEMPLATES.map((t) => (
@@ -633,22 +638,90 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
 
 function ConnectedIntro({ onStart }: { onStart: () => void }) {
   return (
-    <section className="intro-card fade-up">
-      <span className="eyebrow">wallet connected</span>
-      <h2>you ready to become a more disciplined version of yourself?</h2>
-      <p>
-        assert is where excuses get expensive. write one commitment, put real money behind it,
-        and let someone you trust hold the line.
+    <section className="intro-scene">
+      <span className="intro-line intro-line-1">wallet connected.</span>
+      <h2 className="intro-line intro-line-2">you ready to become a more disciplined version of yourself?</h2>
+      <p className="intro-line intro-line-3">
+        this is where excuses get expensive. choose what you’re done tolerating.
       </p>
-      <div className="intro-points">
-        <span>name the identity</span>
-        <span>set the proof</span>
-        <span>stake the consequence</span>
-      </div>
-      <button className="btn-primary intro-start" onClick={onStart}>
-        start my assert →
+      <button className="btn-primary intro-start intro-line intro-line-4" onClick={onStart}>
+        enter assert →
       </button>
     </section>
+  );
+}
+
+function DisciplineHome({
+  allGoals,
+  myGoals,
+  loadingGoals,
+  onStart,
+  onReplayIntro,
+}: {
+  allGoals?: CreatedArgs[];
+  myGoals: CreatedArgs[];
+  loadingGoals: boolean;
+  onStart: () => void;
+  onReplayIntro: () => void;
+}) {
+  const active = myGoals.filter((g) => Number(g.deadline) * 1000 > Date.now()).length;
+  const ethAtRisk = myGoals.reduce((sum, g) => sum + Number(formatEther(g.amount)), 0);
+  return (
+    <div className="discipline-home fade-up">
+      <section className="identity-card">
+        <span className="eyebrow">today’s identity</span>
+        <h2>the version of you that follows through.</h2>
+        <p>don’t write another note to yourself. make a public promise, assign a referee, and price the excuse.</p>
+        <div className="identity-actions">
+          <button className="btn-primary" onClick={onStart}>start a serious assert →</button>
+          <button className="btn ghost" onClick={onReplayIntro}>replay intro</button>
+        </div>
+      </section>
+
+      <section className="status-grid" aria-label="discipline status">
+        <div className="status-card"><span>active asserts</span><b>{active}</b></div>
+        <div className="status-card"><span>eth at risk</span><b>{ethAtRisk ? ethAtRisk.toFixed(3).replace(/\.?0+$/, '') : '0'}</b></div>
+        <div className="status-card"><span>referee queue</span><b>{myGoals.filter((g) => g.referee).length}</b></div>
+        <div className="status-card"><span>streak</span><b>starts today</b></div>
+      </section>
+
+      <section className="start-zone">
+        <span className="eyebrow">start zone</span>
+        <h3>what are you done letting slide?</h3>
+        <div className="start-options">
+          <button onClick={onStart}>break a bad habit</button>
+          <button onClick={onStart}>build a new one</button>
+          <button onClick={onStart}>ship something</button>
+          <button onClick={onStart}>custom assert</button>
+        </div>
+      </section>
+
+      <section className="app-panel your-panel">
+        <div className="section-head">
+          <h2 className="section-title">your asserts</h2>
+          <span className="section-sub muted">personal pressure log</span>
+        </div>
+        {loadingGoals ? (
+          <p className="muted">loading asserts…</p>
+        ) : myGoals.length ? (
+          <div className="goal-grid compact">
+            {myGoals.map((g) => (
+              <GoalCard key={g.id.toString()} id={g.id.toString()} />
+            ))}
+          </div>
+        ) : (
+          <p className="empty-copy">nothing active yet. clean slate, dangerous moment.</p>
+        )}
+      </section>
+
+      <section className="app-panel top-panel">
+        <div className="section-head">
+          <h2 className="section-title">top asserts</h2>
+          <span className="section-sub muted">biggest pots on-chain</span>
+        </div>
+        <TopAsserts goals={allGoals} limit={6} seeded />
+      </section>
+    </div>
   );
 }
 
@@ -865,7 +938,7 @@ function HowItWorks() {
 
 export default function App() {
   const { isConnected, chainId, address } = useAccount();
-  const [builderStarted, setBuilderStarted] = useState(false);
+  const [appMode, setAppMode] = useState<'intro' | 'home' | 'builder'>('intro');
   const onKnownChain = chainId === 8453 || chainId === 84532;
   const { data: allGoals, isLoading: loadingGoals } = useAllCreated();
 
@@ -908,10 +981,22 @@ export default function App() {
           {invited ? (
             <GoalCard id={invited} />
           ) : null}
-          {!builderStarted && !invited ? (
-            <ConnectedIntro onStart={() => setBuilderStarted(true)} />
-          ) : (
+          {!onKnownChain && (
+            <div className="banner">switch your wallet to the <b>base network</b> to create or act on asserts.</div>
+          )}
+
+          {invited ? null : appMode === 'intro' ? (
+            <ConnectedIntro onStart={() => setAppMode('home')} />
+          ) : appMode === 'builder' ? (
             <CreateWizard onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
+          ) : (
+            <DisciplineHome
+              allGoals={allGoals}
+              myGoals={myGoals}
+              loadingGoals={loadingGoals}
+              onStart={() => setAppMode('builder')}
+              onReplayIntro={() => setAppMode('intro')}
+            />
           )}
           {inviteId ? (
             <ShareInvite
@@ -920,35 +1005,6 @@ export default function App() {
               onClose={() => setInviteId(null)}
             />
           ) : null}
-
-          {onKnownChain && (
-            <h2 className="section-title">your asserts</h2>
-          )}
-          {!onKnownChain && (
-            <div className="banner">switch your wallet to the <b>base network</b> to create or act on asserts.</div>
-          )}
-
-          {loadingGoals ? (
-            <p className="muted">loading asserts…</p>
-          ) : myGoals.length ? (
-            <div className="goal-grid">
-              {myGoals.map((g) => (
-                <GoalCard key={g.id.toString()} id={g.id.toString()} />
-              ))}
-            </div>
-          ) : (
-            <p className="muted">no asserts yet — lock one in above, or check the leaderboard below.</p>
-          )}
-
-          <div className="landing-card">
-            <div className="section-head">
-              <h2 className="section-title">top asserts</h2>
-              <span className="section-sub muted">biggest pots on-chain</span>
-            </div>
-            <div style={{ marginTop: 14 }}>
-              <TopAsserts goals={allGoals} limit={8} seeded />
-            </div>
-          </div>
         </main>
       )}
 
