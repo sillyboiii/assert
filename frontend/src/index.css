@@ -293,3 +293,8 @@ footer {
   padding-top: 48px;
   font-size: 13px;
 }
+.conn-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

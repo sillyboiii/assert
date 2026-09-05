@@ -9,7 +9,7 @@ import {
   useWriteContract,
 } from 'wagmi';
 import { commitmentAbi } from './Commitment.abi.ts';
-import { COMMITMENT_ADDRESS, STATUS_LABEL, isBaseSepolia } from './lib/wagmi.ts';
+import { COMMITMENT_ADDRESS, STATUS_LABEL } from './lib/wagmi.ts';
 import { waitForTx } from './lib/tx.ts';
 
 type GoalStruct = [
@@ -47,10 +47,18 @@ function ConnectButton() {
     );
   }
   const connector = connectors.find((c) => c.id === 'coinbaseWalletSDK') ?? connectors[0];
+  const demo = connectors.find((c) => c.id === 'mock');
   return (
-    <button className="btn-primary" onClick={() => connect({ connector })} disabled={isPending}>
-      {isPending ? 'Connecting…' : 'Connect wallet'}
-    </button>
+    <div className="conn-row">
+      <button className="btn-primary" onClick={() => connect({ connector })} disabled={isPending}>
+        {isPending ? 'Connecting…' : 'Connect wallet'}
+      </button>
+      {demo && (
+        <button className="btn ghost" onClick={() => connect({ connector: demo })} disabled={isPending}>
+          Demo wallet
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -225,7 +233,7 @@ function GoalCard({ created }: { created: CreatedArgs }) {
 
 export default function App() {
   const { isConnected, chainId } = useAccount();
-  const onTestnet = isBaseSepolia(chainId);
+  const onKnownChain = chainId === 8453 || chainId === 84532;
 
   return (
     <div className="page">
@@ -250,12 +258,12 @@ export default function App() {
         </section>
       ) : (
         <main>
-          {!onTestnet && (
+          {onKnownChain && <CreateGoalForm />}
+          {!onKnownChain && (
             <div className="banner">
-              Switch to <b>Base Sepolia testnet</b> to create a commitment — mainnet launch is next.
+              Switch your wallet to the <b>Base network</b> to create a commitment.
             </div>
           )}
-          {onTestnet && <CreateGoalForm />}
           <h2 className="section-title">Your commitments</h2>
           <Goals />
         </main>
