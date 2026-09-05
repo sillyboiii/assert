@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, getAbiItem, getAddress, http, parseUnits, formatEther } from 'viem';
 import { base, mainnet } from 'viem/chains';
@@ -188,13 +188,9 @@ const ASSERT_TEMPLATES = [
 function Step1Goal({
   goal,
   setGoal,
-  proof,
-  setProof,
 }: {
   goal: string;
   setGoal: (v: string) => void;
-  proof: string;
-  setProof: (v: string) => void;
 }) {
   return (
     <div className="fade-up-1">
@@ -204,7 +200,7 @@ function Step1Goal({
         <p className="muted">keep it simple. your friend should know exactly what counts.</p>
       </div>
       <label>
-        goal
+        promise
         <div className="textarea-shell">
           <textarea
             className="goal-input"
@@ -219,21 +215,6 @@ function Step1Goal({
           <span className="char-count">{goal.length}/280</span>
         </div>
       </label>
-      <label className="proof-label">
-        how should your friend verify it?
-        <div className="textarea-shell">
-          <textarea
-            className="goal-input proof-input"
-            name="proof"
-            maxLength={180}
-            rows={2}
-          placeholder="screenshots, check-ins, photos, a shipped link…"
-            value={proof}
-            onChange={(e) => setProof(e.target.value)}
-          />
-          <span className="char-count">{proof.length}/180</span>
-        </div>
-      </label>
       <div className="template-grid">
         {ASSERT_TEMPLATES.map((t) => (
           <button
@@ -242,7 +223,6 @@ function Step1Goal({
             className="template-chip"
             onClick={() => {
               setGoal(t.goal);
-              setProof(t.proof);
             }}
           >
             <span>{t.label}</span>
@@ -250,6 +230,33 @@ function Step1Goal({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function Step4Proof({ proof, setProof }: { proof: string; setProof: (v: string) => void }) {
+  return (
+    <div className="fade-up-1">
+      <div className="builder-copy">
+        <span className="eyebrow">proof</span>
+        <h3>how does your friend verify it?</h3>
+        <p className="muted">screenshots, check-ins, photos, links. make the call easy.</p>
+      </div>
+      <label className="proof-label">
+        proof
+        <div className="textarea-shell">
+          <textarea
+            className="goal-input proof-input"
+            name="proof"
+            maxLength={180}
+            rows={2}
+            placeholder="screenshots, check-ins, photos, a shipped link…"
+            value={proof}
+            onChange={(e) => setProof(e.target.value)}
+          />
+          <span className="char-count">{proof.length}/180</span>
+        </div>
+      </label>
     </div>
   );
 }
@@ -504,7 +511,7 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
   const { writeContractAsync, isPending } = useWriteContract();
   const publicClient = usePublicClient();
 
-  const stepsLabel = ['identity', 'referee', 'pressure', 'review'];
+  const stepsLabel = ['promise', 'stake', 'friend', 'proof', 'confirm'];
   const goalText = `${goal.trim()}\n\nProof standard: ${proof.trim()}`;
 
   const refereeResult = (() => {
@@ -522,11 +529,13 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
 
   const canNext =
     step === 0
-      ? goal.trim().length > 0 && proof.trim().length > 0
+      ? goal.trim().length > 0
       : step === 1
+        ? parseFloat(stake) >= 0.001
+      : step === 2
         ? refereeResult.ok && !refereeResult.ensOnly
-        : step === 2
-          ? parseFloat(stake) >= 0.001
+        : step === 3
+          ? proof.trim().length > 0
           : true;
 
   const submit = async () => {
@@ -588,9 +597,8 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
         </div>
       </div>
 
-      {step === 0 && <Step1Goal goal={goal} setGoal={setGoal} proof={proof} setProof={setProof} />}
-      {step === 1 && <Step2Referee value={referee} onChange={setReferee} onResolved={setResolvedReferee} />}
-      {step === 2 && (
+      {step === 0 && <Step1Goal goal={goal} setGoal={setGoal} />}
+      {step === 1 && (
         <Step3Stake
           stake={stake}
           setStake={setStake}
@@ -600,7 +608,9 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
           setIntensity={setIntensity}
         />
       )}
-      {step === 3 && <Step4Review goal={goal} proof={proof} referee={refereeResult.addr ?? referee} stake={stake} days={days} />}
+      {step === 2 && <Step2Referee value={referee} onChange={setReferee} onResolved={setResolvedReferee} />}
+      {step === 3 && <Step4Proof proof={proof} setProof={setProof} />}
+      {step === 4 && <Step4Review goal={goal} proof={proof} referee={refereeResult.addr ?? referee} stake={stake} days={days} />}
 
       {error && <p className="muted" style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
       {txHash && !isPending && (
@@ -617,7 +627,7 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
         ) : (
           <span />
         )}
-        {step < 3 ? (
+        {step < 4 ? (
           <button
             type="button"
             className="btn-primary"
@@ -658,7 +668,145 @@ const SOCIAL_ACTIVITY = [
   { who: 'Liv', action: 'bailed on', body: 'her 6am run', meta: 'referee got paid', badge: 'folded', reaction: '6' },
 ];
 
+const FRIENDS = [
+  { name: 'Josh', role: 'referee', record: '8 won · 2 bailed', detail: 'gym, running, early mornings' },
+  { name: 'Mia', role: 'watching you', record: '12 won · 1 bailed', detail: 'reading, no sugar, focus blocks' },
+  { name: 'Ade', role: 'live assert', record: '5 day streak', detail: 'no nicotine' },
+  { name: 'Liv', role: 'referee', record: '4 won · 3 bailed', detail: 'wellness and sleep' },
+];
+
 type AppMode = 'intro' | 'home' | 'asserts' | 'builder' | 'friends' | 'you';
+type AssertFilter = 'Live' | 'Pending' | 'Won' | 'Bailed';
+
+const FILTERS: AssertFilter[] = ['Live', 'Pending', 'Won', 'Bailed'];
+
+function sampleStatus(id: bigint): AssertFilter {
+  return (['Live', 'Pending', 'Won', 'Bailed'] as const)[Number(id % 4n)];
+}
+
+function AssertPreviewCard({ goal, status }: { goal: CreatedArgs; status: AssertFilter }) {
+  const cd = useCountdown(goal.deadline);
+  return (
+    <button className="assert-preview-card">
+      <div className="assert-preview-top">
+        <span className={`assert-pill ${status.toLowerCase()}`}>{status}</span>
+        <b>{fmt(goal.amount)} ETH</b>
+      </div>
+      <h3>{goal.goalText}</h3>
+      <p>{short(goal.referee)} is referee · {cd.expired ? 'done' : cd.out}</p>
+    </button>
+  );
+}
+
+function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
+  const [filter, setFilter] = useState<AssertFilter>('Live');
+  const examples = SAMPLE_ASSERTS.filter((g) => sampleStatus(g.id) === filter).slice(0, 3);
+  return (
+    <div className="social-app fade-up">
+      <section className="tab-shell">
+        <div className="tab-head">
+          <span className="eyebrow">asserts</span>
+          <h2>your promises</h2>
+        </div>
+        <div className="filter-row">
+          {FILTERS.map((f) => (
+            <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f}</button>
+          ))}
+        </div>
+        <div className="assert-card-list">
+          {myGoals.length ? (
+            myGoals.map((g) => <GoalCard key={g.id.toString()} id={g.id.toString()} />)
+          ) : examples.length ? (
+            examples.map((g) => <AssertPreviewCard key={g.id.toString()} goal={g} status={filter} />)
+          ) : (
+            <p className="empty-copy">nothing {filter.toLowerCase()} yet.</p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function FriendsTab({ onStart }: { onStart: () => void }) {
+  return (
+    <div className="social-app fade-up">
+      <section className="tab-shell">
+        <div className="tab-head inline">
+          <div>
+            <span className="eyebrow">friends</span>
+            <h2>your referees</h2>
+          </div>
+          <button className="small-blue">invite</button>
+        </div>
+        <input className="friend-search" placeholder="search or invite a friend" />
+        <div className="friend-list">
+          {FRIENDS.map((f) => (
+            <button className="friend-card" key={f.name} onClick={onStart}>
+              <div className="avatar">{f.name[0]}</div>
+              <div>
+                <h3>{f.name}</h3>
+                <p>{f.detail}</p>
+              </div>
+              <div className="friend-meta">
+                <b>{f.role}</b>
+                <span>{f.record}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="activity-panel embedded">
+        <div className="section-head clean">
+          <h2 className="section-title">their activity</h2>
+        </div>
+        {SOCIAL_ACTIVITY.slice(0, 3).map((item) => (
+          <button className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`} onClick={onStart}>
+            <div className="avatar">{item.who[0]}</div>
+            <div>
+              <p><b>{item.who}</b> {item.action} <strong>{item.body}</strong></p>
+              <span>{item.meta}</span>
+            </div>
+            <div className="activity-side"><b>{item.badge}</b><span>♡ {item.reaction}</span></div>
+          </button>
+        ))}
+      </section>
+    </div>
+  );
+}
+
+function ProfileTab({ myGoals }: { myGoals: CreatedArgs[] }) {
+  const total = myGoals.length;
+  const ethAtRisk = myGoals.reduce((sum, g) => sum + Number(formatEther(g.amount)), 0);
+  return (
+    <div className="social-app fade-up">
+      <section className="profile-card">
+        <div className="profile-top">
+          <div className="profile-avatar">Y</div>
+          <div>
+            <span className="eyebrow">you</span>
+            <h2>sillyboi.base</h2>
+            <p>{short(myGoals[0]?.creator ?? '0xA8EaF49c1c33F987eFE883FdE72d4a1c243fB9EC')}</p>
+          </div>
+        </div>
+        <div className="profile-stats">
+          <div><span>won</span><b>{Math.max(0, total - 1)}</b></div>
+          <div><span>completion</span><b>{total ? '80%' : '0%'}</b></div>
+          <div><span>kept</span><b>{ethAtRisk ? `${ethAtRisk.toFixed(2)} ETH` : '0 ETH'}</b></div>
+          <div><span>lost</span><b>0 ETH</b></div>
+        </div>
+      </section>
+      <section className="tab-shell">
+        <div className="section-head clean">
+          <h2 className="section-title">recent history</h2>
+        </div>
+        {SOCIAL_ACTIVITY.slice(0, 3).map((item) => (
+          <div className="history-row" key={item.body}><span>{item.badge}</span><p>{item.body}</p></div>
+        ))}
+        <WalletSettings />
+      </section>
+    </div>
+  );
+}
 
 function DisciplineHome({
   allGoals,
@@ -768,19 +916,6 @@ function DisciplineHome({
           <span className="section-sub muted">people putting money where their mouth is</span>
         </div>
         <TopAsserts goals={allGoals} limit={6} seeded />
-      </section>
-    </div>
-  );
-}
-
-function SimpleTab({ title, copy, children }: { title: string; copy: string; children?: ReactNode }) {
-  return (
-    <div className="social-app fade-up">
-      <section className="simple-tab-card">
-        <span className="eyebrow">assert</span>
-        <h2>{title}</h2>
-        <p>{copy}</p>
-        {children}
       </section>
     </div>
   );
@@ -1075,50 +1210,22 @@ export default function App() {
           {invited ? (
             <GoalCard id={invited} />
           ) : null}
-          {!onKnownChain && (
-            <div className="banner">switch your wallet to the <b>base network</b> to create or act on asserts.</div>
-          )}
 
           {invited ? null : appMode === 'intro' ? (
             <ConnectedIntro onStart={() => setAppMode('home')} />
           ) : appMode === 'builder' ? (
             <div className="create-screen fade-up">
+              {!onKnownChain && (
+                <div className="banner action-warning">switch to <b>base</b> before locking an assert.</div>
+              )}
               <CreateWizard onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
             </div>
           ) : appMode === 'asserts' ? (
-            <SimpleTab title="your asserts" copy="every promise you have live, pending, won or folded.">
-              {loadingGoals ? (
-                <p className="muted">loading asserts…</p>
-              ) : myGoals.length ? (
-                <div className="goal-grid compact">
-                  {myGoals.map((g) => <GoalCard key={g.id.toString()} id={g.id.toString()} />)}
-                </div>
-              ) : (
-                <p className="empty-copy">no active asserts yet. hit + and send one to a friend.</p>
-              )}
-            </SimpleTab>
+            <AssertsTab myGoals={myGoals} />
           ) : appMode === 'friends' ? (
-            <SimpleTab title="friends" copy="soon this becomes your referee list, invite links and people watching your asserts.">
-              <div className="activity-panel embedded">
-                {SOCIAL_ACTIVITY.map((item) => (
-                  <button className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`} onClick={() => setAppMode('builder')}>
-                    <div className="avatar">{item.who[0]}</div>
-                    <div>
-                      <p><b>{item.who}</b> {item.action} <strong>{item.body}</strong></p>
-                      <span>{item.meta}</span>
-                    </div>
-                    <div className="activity-side">
-                      <b>{item.badge}</b>
-                      <span>♡ {item.reaction}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </SimpleTab>
+            <FriendsTab onStart={() => setAppMode('builder')} />
           ) : appMode === 'you' ? (
-            <SimpleTab title="you" copy="your accountability profile. clean for now, sharper once real asserts start coming in.">
-              <WalletSettings />
-            </SimpleTab>
+            <ProfileTab myGoals={myGoals} />
           ) : (
             <DisciplineHome
               allGoals={allGoals}
