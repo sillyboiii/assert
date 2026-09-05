@@ -259,10 +259,8 @@ export default function App() {
       <header>
         <div className="brand">
           <img className="brand-logo" src="/logo.png" alt="Assert" />
-          <span className="brand-stack">
-            <img className="brand-wordmark" src="/wordmark.png" alt="assert" />
-            <span className="tagline">assert it. or fold.</span>
-          </span>
+          <img className="brand-wordmark" src="/wordmark.png" alt="assert" />
+          <span className="tagline">assert it. or fold.</span>
         </div>
         <ConnectButton />
       </header>
