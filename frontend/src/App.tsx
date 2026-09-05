@@ -34,7 +34,21 @@ type CreatedArgs = {
 const short = (a: `0x${string}` | undefined) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '');
 const fmt = (w: bigint) => `${Number(formatEther(w)).toFixed(3)} ETH`;
 
-function ConnectButton() {
+function SplitMark({ size = 28, bare = false }: { size?: number; bare?: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      {!bare && (
+        <rect x="1" y="1" width="62" height="62" rx="18" fill="#E9E7FA" stroke="#E5E0F4" strokeWidth="2" />
+      )}
+      <path d="M17 45 L31 20" stroke="#6965E8" strokeWidth="10" strokeLinecap="round" />
+      <path d="M33 20 L47 45" stroke="#25214F" strokeWidth="10" strokeLinecap="round" />
+      <path d="M21.5 38 H28" stroke="#FFFFFF" strokeWidth="7" strokeLinecap="round" />
+      <path d="M36 38 H42.5" stroke="#FFFFFF" strokeWidth="7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ConnectButton({ label = 'Connect wallet' }: { label?: string }) {
   const { isConnected, address } = useAccount();
   const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
@@ -51,7 +65,7 @@ function ConnectButton() {
   return (
     <div className="conn-row">
       <button className="btn-primary" onClick={() => connect({ connector })} disabled={isPending}>
-        {isPending ? 'Connecting…' : 'Connect wallet'}
+        {isPending ? 'Connecting…' : label}
       </button>
       {demo && (
         <button className="btn ghost" onClick={() => connect({ connector: demo })} disabled={isPending}>
@@ -90,18 +104,18 @@ function CreateGoalForm() {
         window.location.reload();
       }}
     >
-      <h2>Create a commitment</h2>
+      <h2>new commitment</h2>
       <label>
-        What are you asserting?
-        <textarea name="goal" maxLength={280} rows={2} placeholder="No junk food for 30 days" />
+        what are you asserting?
+        <textarea name="goal" maxLength={280} rows={2} placeholder="no junk food for 30 days…" />
       </label>
       <div className="row">
         <label>
-          Stake
+          stake (eth)
           <input name="stake" type="number" step="0.01" min="0.001" max="5" placeholder="0.5" />
         </label>
         <label>
-          Deadline
+          deadline
           <select name="days" defaultValue="7">
             <option value="1">1 day</option>
             <option value="3">3 days</option>
@@ -112,11 +126,11 @@ function CreateGoalForm() {
         </label>
       </div>
       <label>
-        Referee wallet
+        referee wallet
         <input name="referee" placeholder="0x1234…" />
       </label>
       <button className="btn-primary" type="submit" disabled={isPending}>
-        {isPending ? 'Locking…' : 'Lock it in. Assert it.'}
+        {isPending ? 'locking…' : 'lock it in. assert it.'}
       </button>
     </form>
   );
@@ -146,8 +160,8 @@ function Goals() {
     refetchInterval: 15_000,
   });
 
-  if (isLoading) return <p className="muted">Loading your commitments…</p>;
-  if (!goals?.length) return <p className="muted">No commitments yet — lock one in above.</p>;
+  if (isLoading) return <p className="muted">loading your commitments…</p>;
+  if (!goals?.length) return <p className="muted">no commitments yet — lock one in above.</p>;
   return (
     <div className="goal-grid">
       {goals.map((g) => (
@@ -204,30 +218,49 @@ function GoalCard({ created }: { created: CreatedArgs }) {
       <div className="goal-actions">
         {status === 0 && isReferee && (
           <button className="btn" onClick={() => run('acceptRole')} disabled={isPending}>
-            Accept role
+            accept role
           </button>
         )}
         {status === 0 && isCreator && (
           <button className="btn ghost" onClick={() => run('cancel')} disabled={isPending}>
-            Cancel (refund)
+            cancel · refund
           </button>
         )}
         {status === 1 && isReferee && (
           <button className="btn green" onClick={() => run('approve')} disabled={isPending}>
-            ✓ They did it
+            ✓ they did it
           </button>
         )}
         {status === 1 && expired && (
           <button className="btn red" onClick={() => run('claimReferee')} disabled={isPending}>
-            Referee earns stake
+            referee earns stake
           </button>
         )}
-        {status === 2 && <span className="muted">✓ Honored — stake returned</span>}
-        {status === 3 && <span className="muted">✗ Humbled — referee earned it</span>}
-        {status === 4 && <span className="muted">Cancelled — full refund</span>}
-        {status === 1 && !expired && !isReferee && <span className="muted">Locked in — waiting on deadline</span>}
+        {status === 2 && <span className="muted">✓ honored — stake returned</span>}
+        {status === 3 && <span className="muted">✗ humbled — referee earned it</span>}
+        {status === 4 && <span className="muted">cancelled — full refund</span>}
+        {status === 1 && !expired && !isReferee && <span className="muted">locked in — waiting on deadline</span>}
       </div>
     </div>
+  );
+}
+
+function HowItWorks() {
+  const steps = [
+    { n: '01', title: 'you stake', body: 'lock real eth on a goal that actually matters to you.' },
+    { n: '02', title: 'a friend referees', body: 'they accept the role and verify the truth when the clock runs out.' },
+    { n: '03', title: 'the deadline decides', body: 'hit it, your stake comes back. miss it, your friend takes the pot.' },
+  ];
+  return (
+    <section className="steps" aria-label="how it works">
+      {steps.map((s) => (
+        <div className="step" key={s.n}>
+          <span className="step-num">{s.n}</span>
+          <h3>{s.title}</h3>
+          <p>{s.body}</p>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -239,36 +272,50 @@ export default function App() {
     <div className="page">
       <header>
         <div className="brand">
-          <span className="mark">A</span>
-          <span className="brand-name">Assert</span>
-          <span className="tagline">Assert it. Or fold.</span>
+          <span className="mark">
+            <SplitMark size={44} />
+          </span>
+          <span className="brand-stack">
+            <span className="brand-name">assert</span>
+            <span className="tagline">assert it. or fold.</span>
+          </span>
         </div>
         <ConnectButton />
       </header>
       {!isConnected ? (
         <section className="hero">
-          <h1>
-            Stake money on your own goals.
-            <br />
-            Hit them — or a friend earns it.
-          </h1>
-          <p className="muted">
-            Commitments enforced by code on Base. You set the stakes. A friend referees. No excuses.
-          </p>
+          <div className="hero-accent">
+            <SplitMark size={460} bare />
+          </div>
+          <div className="hero-inner">
+            <h1>
+              assert it,
+              <br />
+              or fold.
+            </h1>
+            <p className="lead">
+              stake money on your own goals. a friend referees the truth. hit the deadline and it's yours —
+              miss it and they take it home. enforced by code on base, no excuses.
+            </p>
+            <div className="hero-cta">
+              <ConnectButton label="connect wallet to start" />
+            </div>
+            <HowItWorks />
+          </div>
         </section>
       ) : (
         <main>
           {onKnownChain && <CreateGoalForm />}
           {!onKnownChain && (
             <div className="banner">
-              Switch your wallet to the <b>Base network</b> to create a commitment.
+              switch your wallet to the <b>base network</b> to create a commitment.
             </div>
           )}
-          <h2 className="section-title">Your commitments</h2>
+          <h2 className="section-title">your commitments</h2>
           <Goals />
         </main>
       )}
-      <footer className="muted">Assert — on your honor, onchain.</footer>
+      <footer className="muted">assert — on your honor, onchain.</footer>
     </div>
   );
 }
