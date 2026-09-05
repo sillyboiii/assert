@@ -652,10 +652,10 @@ function ConnectedIntro({ onStart }: { onStart: () => void }) {
 }
 
 const SOCIAL_ACTIVITY = [
-  { who: 'Josh', action: 'completed', body: 'Gym 4x this week', meta: 'Mia approved it · 20m ago' },
-  { who: 'Mia', action: 'staked', body: '0.03 ETH on reading every day', meta: 'deadline in 7 days' },
-  { who: 'Ade', action: 'checked in', body: 'no nicotine, day 5', meta: 'Sam is watching' },
-  { who: 'Liv', action: 'folded', body: 'missed her 6am run', meta: 'referee got paid' },
+  { who: 'Josh', action: 'completed', body: 'Gym 4x this week', meta: 'Mia approved it · 20m ago', badge: 'won', reaction: '12' },
+  { who: 'Mia', action: 'put', body: '0.03 ETH on reading every day', meta: 'deadline in 7 days', badge: 'live', reaction: '8' },
+  { who: 'Ade', action: 'checked in', body: 'no nicotine, day 5', meta: 'Sam is watching', badge: 'day 5', reaction: '15' },
+  { who: 'Liv', action: 'bailed on', body: 'her 6am run', meta: 'referee got paid', badge: 'folded', reaction: '6' },
 ];
 
 type AppMode = 'intro' | 'home' | 'asserts' | 'builder' | 'friends' | 'you';
@@ -665,13 +665,11 @@ function DisciplineHome({
   myGoals,
   loadingGoals,
   onStart,
-  onReplayIntro,
 }: {
   allGoals?: CreatedArgs[];
   myGoals: CreatedArgs[];
   loadingGoals: boolean;
   onStart: () => void;
-  onReplayIntro: () => void;
 }) {
   const active = myGoals.filter((g) => Number(g.deadline) * 1000 > Date.now()).length;
   const ethAtRisk = myGoals.reduce((sum, g) => sum + Number(formatEther(g.amount)), 0);
@@ -713,15 +711,15 @@ function DisciplineHome({
           {displayGoals.map((g) => {
             const cd = useCountdown(g.deadline);
             return (
-              <div className="active-mini-card" key={g.id.toString()}>
+              <button className="active-mini-card" key={g.id.toString()}>
                 <span className="mini-label">{myGoals.length ? 'live' : 'example'}</span>
                 <h3>{g.goalText}</h3>
-                <p>{myGoals.length ? `${short(g.referee)} is watching` : 'Josh has money waiting if you skip.'}</p>
+                <p>{myGoals.length ? `${short(g.referee)} is watching` : `Josh gets your ${fmt(g.amount)} ETH if you bail.`}</p>
                 <div className="mini-foot">
                   <b>{fmt(g.amount)} ETH</b>
                   <span>{cd.expired ? 'done' : cd.out}</span>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -730,16 +728,19 @@ function DisciplineHome({
       <section className="activity-panel">
         <div className="section-head clean">
           <h2 className="section-title">friend activity</h2>
-          <button className="tiny-link" onClick={onReplayIntro}>replay intro</button>
         </div>
         {SOCIAL_ACTIVITY.map((item) => (
-          <div className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`}>
+          <button className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`} onClick={onStart}>
             <div className="avatar">{item.who[0]}</div>
             <div>
               <p><b>{item.who}</b> {item.action} <strong>{item.body}</strong></p>
               <span>{item.meta}</span>
             </div>
-          </div>
+            <div className="activity-side">
+              <b>{item.badge}</b>
+              <span>♡ {item.reaction}</span>
+            </div>
+          </button>
         ))}
       </section>
 
@@ -781,6 +782,18 @@ function SimpleTab({ title, copy, children }: { title: string; copy: string; chi
         <p>{copy}</p>
         {children}
       </section>
+    </div>
+  );
+}
+
+function WalletSettings() {
+  const { address } = useAccount();
+  const { disconnect } = useDisconnect();
+  return (
+    <div className="wallet-settings">
+      <span>connected wallet</span>
+      <b>{short(address)}</b>
+      <button className="btn ghost" onClick={() => disconnect()}>disconnect</button>
     </div>
   );
 }
@@ -1040,9 +1053,7 @@ export default function App() {
   return (
     <div className="page">
       <div className="aurora" aria-hidden="true" />
-      <header>
-        <ConnectButton />
-      </header>
+      <header>{!isConnected ? <ConnectButton /> : null}</header>
 
       {!isConnected ? (
         <>
@@ -1090,25 +1101,30 @@ export default function App() {
             <SimpleTab title="friends" copy="soon this becomes your referee list, invite links and people watching your asserts.">
               <div className="activity-panel embedded">
                 {SOCIAL_ACTIVITY.map((item) => (
-                  <div className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`}>
+                  <button className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`} onClick={() => setAppMode('builder')}>
                     <div className="avatar">{item.who[0]}</div>
                     <div>
                       <p><b>{item.who}</b> {item.action} <strong>{item.body}</strong></p>
                       <span>{item.meta}</span>
                     </div>
-                  </div>
+                    <div className="activity-side">
+                      <b>{item.badge}</b>
+                      <span>♡ {item.reaction}</span>
+                    </div>
+                  </button>
                 ))}
               </div>
             </SimpleTab>
           ) : appMode === 'you' ? (
-            <SimpleTab title="you" copy="your accountability profile. clean for now, sharper once real asserts start coming in." />
+            <SimpleTab title="you" copy="your accountability profile. clean for now, sharper once real asserts start coming in.">
+              <WalletSettings />
+            </SimpleTab>
           ) : (
             <DisciplineHome
               allGoals={allGoals}
               myGoals={myGoals}
               loadingGoals={loadingGoals}
               onStart={() => setAppMode('builder')}
-              onReplayIntro={() => setAppMode('intro')}
             />
           )}
           {inviteId ? (
