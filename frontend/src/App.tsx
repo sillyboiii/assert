@@ -1160,22 +1160,7 @@ function LandingNav() {
 
 function LandingAssertCard() {
   return (
-    <section className="landing-phone fade-up fade-up-2" aria-label="example assert">
-      <div className="landing-phone-top">
-        <span className="assert-pill live">LIVE</span>
-        <b>0.50 ETH</b>
-      </div>
-      <h2>Gym 4× this week</h2>
-      <div className="landing-progress" aria-hidden="true">
-        <span />
-      </div>
-      <div className="landing-metrics">
-        <div><span>referee</span><b>Josh</b></div>
-        <div><span>progress</span><b>3/4</b></div>
-        <div><span>left</span><b>22h</b></div>
-      </div>
-      <div className="landing-fold-copy">Miss it and Josh gets your 0.50 ETH.</div>
-    </section>
+    <img className="landing-phone fade-up fade-up-2" src="/assert-card.png" alt="Live Assert card for gym 4x this week" />
   );
 }
 
