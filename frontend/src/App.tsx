@@ -731,37 +731,6 @@ export default function App() {
             </div>
           </section>
 
-          <div className="landing-card receipt-card fade-up fade-up-4">
-            <div>
-              <span className="eyebrow">how it hits</span>
-              <h2 className="section-title">one promise. one referee. real money.</h2>
-            </div>
-            <div className="receipt-stack">
-              <div className="receipt-line">
-                <span>you assert</span>
-                <b>“no junk food for 30 days”</b>
-              </div>
-              <div className="receipt-line">
-                <span>you stake</span>
-                <b>0.50 ETH</b>
-              </div>
-              <div className="receipt-line">
-                <span>they judge</span>
-                <b>friend accepts referee role</b>
-              </div>
-              <div className="receipt-split">
-                <div>
-                  <span>hit it</span>
-                  <b>refund returns to you</b>
-                </div>
-                <div>
-                  <span>fold</span>
-                  <b>referee gets paid</b>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <HowItWorks />
         </>
       ) : (
