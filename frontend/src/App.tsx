@@ -1160,7 +1160,7 @@ function LandingNav() {
 
 function LandingAssertCard() {
   return (
-    <section className="landing-phone main-live fade-up fade-up-2" aria-label="example assert">
+    <section className="landing-phone fade-up fade-up-2" aria-label="example assert">
       <div className="landing-phone-top">
         <span className="assert-pill live">LIVE</span>
         <b>0.50 ETH</b>
@@ -1179,16 +1179,6 @@ function LandingAssertCard() {
   );
 }
 
-function LandingMiniAssert({ title, stake, badge, className }: { title: string; stake: string; badge: string; className: string }) {
-  return (
-    <div className={`landing-mini-assert ${className} ${badge.toLowerCase()}`}>
-      <span>{badge}</span>
-      <h3>{title}</h3>
-      <b>{stake}</b>
-    </div>
-  );
-}
-
 const LANDING_ACTIVITY = [
   { who: 'Josh', body: 'completed Gym 4× this week', meta: 'Mia approved it · 20m ago', badge: 'WON' },
   { who: 'Mia', body: 'put 0.03 ETH on reading daily', meta: 'deadline in 7 days', badge: 'LIVE' },
@@ -1199,8 +1189,8 @@ const LANDING_ACTIVITY = [
 
 function LandingActivity() {
   return (
-    <div id="people" className="landing-activity fade-up fade-up-3" aria-label="recent assert activity">
-      {LANDING_ACTIVITY.map((item, index) => (
+    <section id="people" className="landing-activity fade-up fade-up-3" aria-label="recent assert activity">
+      {LANDING_ACTIVITY.slice(0, 4).map((item, index) => (
         <div className={`activity-row static floating-row row-${index + 1} ${item.badge.toLowerCase()}`} key={`${item.who}-${item.body}`}>
           <div className="avatar">{item.who[0]}</div>
           <div>
@@ -1210,18 +1200,23 @@ function LandingActivity() {
           <div className="activity-side"><b>{item.badge}</b></div>
         </div>
       ))}
-    </div>
+    </section>
   );
 }
 
-function LandingProductCluster() {
+function LandingCardStack() {
+  const item = LANDING_ACTIVITY[1];
   return (
-    <div className="landing-product-cluster">
+    <div className="landing-card-stack">
+      <div className={`activity-row static hero-activity ${item.badge.toLowerCase()}`}>
+        <div className="avatar">{item.who[0]}</div>
+        <div>
+          <p><b>{item.who}</b> <strong>{item.body}</strong></p>
+          <span>{item.meta}</span>
+        </div>
+        <div className="activity-side"><b>{item.badge}</b></div>
+      </div>
       <LandingAssertCard />
-      <LandingMiniAssert title="read daily" stake="0.03 ETH" badge="LIVE" className="mini-a" />
-      <LandingMiniAssert title="no nicotine" stake="0.10 ETH" badge="WON" className="mini-b" />
-      <LandingMiniAssert title="6am run" stake="FOLDED" badge="FOLDED" className="mini-c" />
-      <LandingActivity />
     </div>
   );
 }
@@ -1275,18 +1270,14 @@ export default function App() {
                 <p className="hero-line fade-up fade-up-2">Your friend calls it.</p>
                 <div className="hero-actions fade-up fade-up-3">
                   <ConnectButton label="Assert something →" />
-                  <a className="btn secondary" href="#people">See what friends are asserting ↓</a>
                 </div>
               </div>
-              <LandingProductCluster />
+              <LandingCardStack />
             </div>
           </section>
 
           <main className="landing-main">
-            <section className="landing-type-flow" aria-hidden="true">
-              <span>PUT SOMETHING</span>
-              <b>ON IT.</b>
-            </section>
+            <LandingActivity />
             <LandingFinalCta />
           </main>
         </>
