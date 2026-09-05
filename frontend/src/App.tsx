@@ -199,12 +199,12 @@ function Step1Goal({
   return (
     <div className="fade-up-1">
       <div className="builder-copy">
-        <span className="eyebrow">identity check</span>
-        <h3>who are you trying to become?</h3>
-        <p className="muted">make the promise specific enough that your referee can call it without drama.</p>
+        <span className="eyebrow">new assert</span>
+        <h3>what are you putting out there?</h3>
+        <p className="muted">keep it simple. your friend should know exactly what counts.</p>
       </div>
       <label>
-        your assert
+        goal
         <div className="textarea-shell">
           <textarea
             className="goal-input"
@@ -220,14 +220,14 @@ function Step1Goal({
         </div>
       </label>
       <label className="proof-label">
-        proof standard
+        how should your friend verify it?
         <div className="textarea-shell">
           <textarea
             className="goal-input proof-input"
             name="proof"
             maxLength={180}
             rows={2}
-            placeholder="what evidence should your referee expect?"
+          placeholder="screenshots, check-ins, photos, a shipped link…"
             value={proof}
             onChange={(e) => setProof(e.target.value)}
           />
@@ -307,7 +307,7 @@ function Step2Referee({
   return (
     <div className="fade-up-1">
       <label>
-        who referees the truth?
+        choose a friend
         <input
           name="referee"
           placeholder="friend.eth or 0x1234…"
@@ -318,8 +318,8 @@ function Step2Referee({
       {resolving && <p className="ens-hint">resolving ens…</p>}
       {resolved && <p className="ens-hint">✓ resolved → {short(addr)}</p>}
       <div className="referee-suggest">
-        <span>💌 tip: use their ens or a wallet address</span>
-        <span>🔗 we'll ping you a shareable invite after you lock it in</span>
+        <span>send it to someone who will actually call you out</span>
+        <span>you'll get a link to share after you lock it in</span>
       </div>
       {value.trim() && !valid && !resolving && (
         <p className="muted" style={{ fontSize: 12 }}>
@@ -364,9 +364,9 @@ function Step3Stake({
   return (
     <div className="fade-up-1">
       <div className="builder-copy">
-        <span className="eyebrow">pressure setting</span>
-        <h3>how expensive should folding be?</h3>
-        <p className="muted">pick a mode or type your own stake. bigger pot, louder promise.</p>
+        <span className="eyebrow">stake</span>
+        <h3>what should be on the line?</h3>
+        <p className="muted">enough to matter, not enough to make the app feel weird.</p>
       </div>
       <div className="intensity-grid">
         {modes.map((m) => (
@@ -386,7 +386,7 @@ function Step3Stake({
         ))}
       </div>
       <label>
-        how much are you putting up? (eth)
+        amount
         <input
           name="stake"
           type="number"
@@ -399,7 +399,7 @@ function Step3Stake({
         />
       </label>
       <label style={{ marginTop: 14 }}>
-        how long are you held to it?
+        deadline
         <div className="deadline-chips">
           {deadlineOptions.map((o) => (
             <button
@@ -454,8 +454,8 @@ function Step4Review({
   const fmtNum = (n: number) => String(n.toFixed(3)).replace(/\.?0+$/, '');
   return (
     <div className="review-card fade-up-1">
-      <span className="eyebrow">final check</span>
-      <h3>read this like a contract with yourself.</h3>
+      <span className="eyebrow">send assert</span>
+      <h3>ready to send this to your friend?</h3>
       <div className="review-line big">
         <span>i assert</span>
         <b>{goal}</b>
@@ -651,6 +651,13 @@ function ConnectedIntro({ onStart }: { onStart: () => void }) {
   );
 }
 
+const SOCIAL_ACTIVITY = [
+  { who: 'Josh', action: 'completed', body: 'Gym 4x this week', meta: 'Mia approved it · 20m ago' },
+  { who: 'Mia', action: 'staked', body: '0.03 ETH on reading every day', meta: 'deadline in 7 days' },
+  { who: 'Ade', action: 'checked in', body: 'no nicotine, day 5', meta: 'Sam is watching' },
+  { who: 'Liv', action: 'folded', body: 'missed her 6am run', meta: 'referee got paid' },
+];
+
 function DisciplineHome({
   allGoals,
   myGoals,
@@ -666,40 +673,78 @@ function DisciplineHome({
 }) {
   const active = myGoals.filter((g) => Number(g.deadline) * 1000 > Date.now()).length;
   const ethAtRisk = myGoals.reduce((sum, g) => sum + Number(formatEther(g.amount)), 0);
+  const displayGoals = myGoals.length ? myGoals : SAMPLE_ASSERTS.slice(0, 2);
   return (
-    <div className="discipline-home fade-up">
-      <section className="identity-card">
-        <span className="eyebrow">today’s identity</span>
-        <h2>the version of you that follows through.</h2>
-        <p>don’t write another note to yourself. make a public promise, assign a referee, and price the excuse.</p>
-        <div className="identity-actions">
-          <button className="btn-primary" onClick={onStart}>start a serious assert →</button>
-          <button className="btn ghost" onClick={onReplayIntro}>replay intro</button>
+    <div className="social-app fade-up">
+      <section className="home-hero-card">
+        <div>
+          <span className="eyebrow">home</span>
+          <h2>{active ? `${active} assert${active === 1 ? '' : 's'} on the line.` : 'nothing on the line yet.'}</h2>
+          <p>
+            make one promise, put something behind it, and bring a friend in so it actually counts.
+          </p>
+        </div>
+        <button className="home-plus" onClick={onStart} aria-label="create assert">+</button>
+      </section>
+
+      <section className="on-line-strip" aria-label="what's on the line">
+        <div>
+          <span>on the line</span>
+          <b>{ethAtRisk ? `${ethAtRisk.toFixed(3).replace(/\.?0+$/, '')} ETH` : '0 ETH'}</b>
+        </div>
+        <div>
+          <span>active</span>
+          <b>{active}</b>
+        </div>
+        <div>
+          <span>friends watching</span>
+          <b>{myGoals.length ? myGoals.length : 'soon'}</b>
         </div>
       </section>
 
-      <section className="status-grid" aria-label="discipline status">
-        <div className="status-card"><span>active asserts</span><b>{active}</b></div>
-        <div className="status-card"><span>eth at risk</span><b>{ethAtRisk ? ethAtRisk.toFixed(3).replace(/\.?0+$/, '') : '0'}</b></div>
-        <div className="status-card"><span>referee queue</span><b>{myGoals.filter((g) => g.referee).length}</b></div>
-        <div className="status-card"><span>streak</span><b>starts today</b></div>
-      </section>
-
-      <section className="start-zone">
-        <span className="eyebrow">start zone</span>
-        <h3>what are you done letting slide?</h3>
-        <div className="start-options">
-          <button onClick={onStart}>break a bad habit</button>
-          <button onClick={onStart}>build a new one</button>
-          <button onClick={onStart}>ship something</button>
-          <button onClick={onStart}>custom assert</button>
+      <section className="active-carousel">
+        <div className="section-head clean">
+          <h2 className="section-title">active asserts</h2>
+          <span className="section-sub muted">what’s currently at risk</span>
+        </div>
+        <div className="active-scroll">
+          {displayGoals.map((g) => {
+            const cd = useCountdown(g.deadline);
+            return (
+              <div className="active-mini-card" key={g.id.toString()}>
+                <span className="mini-label">{myGoals.length ? 'live' : 'example'}</span>
+                <h3>{g.goalText}</h3>
+                <p>{myGoals.length ? `${short(g.referee)} is watching` : 'Josh has money waiting if you skip.'}</p>
+                <div className="mini-foot">
+                  <b>{fmt(g.amount)} ETH</b>
+                  <span>{cd.expired ? 'done' : cd.out}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
-      <section className="app-panel your-panel">
+      <section className="activity-panel">
+        <div className="section-head clean">
+          <h2 className="section-title">friend activity</h2>
+          <button className="tiny-link" onClick={onReplayIntro}>replay intro</button>
+        </div>
+        {SOCIAL_ACTIVITY.map((item) => (
+          <div className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`}>
+            <div className="avatar">{item.who[0]}</div>
+            <div>
+              <p><b>{item.who}</b> {item.action} <strong>{item.body}</strong></p>
+              <span>{item.meta}</span>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <section className="app-panel your-panel social-panel">
         <div className="section-head">
           <h2 className="section-title">your asserts</h2>
-          <span className="section-sub muted">personal pressure log</span>
+          <span className="section-sub muted">your current promises</span>
         </div>
         {loadingGoals ? (
           <p className="muted">loading asserts…</p>
@@ -710,18 +755,30 @@ function DisciplineHome({
             ))}
           </div>
         ) : (
-          <p className="empty-copy">nothing active yet. clean slate, dangerous moment.</p>
+          <p className="empty-copy">no active asserts yet. start one and send it to a friend.</p>
         )}
       </section>
 
-      <section className="app-panel top-panel">
+      <section className="app-panel top-panel social-panel">
         <div className="section-head">
           <h2 className="section-title">top asserts</h2>
-          <span className="section-sub muted">biggest pots on-chain</span>
+          <span className="section-sub muted">people putting money where their mouth is</span>
         </div>
         <TopAsserts goals={allGoals} limit={6} seeded />
       </section>
     </div>
+  );
+}
+
+function BottomNav({ onCreate }: { onCreate: () => void }) {
+  return (
+    <nav className="bottom-nav" aria-label="app navigation">
+      <button>Home</button>
+      <button>Asserts</button>
+      <button className="nav-plus" onClick={onCreate}>+</button>
+      <button>Friends</button>
+      <button>You</button>
+    </nav>
   );
 }
 
@@ -1005,6 +1062,7 @@ export default function App() {
               onClose={() => setInviteId(null)}
             />
           ) : null}
+          {appMode !== 'intro' && !invited ? <BottomNav onCreate={() => setAppMode('builder')} /> : null}
         </main>
       )}
 
