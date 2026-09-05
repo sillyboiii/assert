@@ -1149,19 +1149,12 @@ function TopAsserts({ goals, limit = 8, seeded = false }: { goals?: CreatedArgs[
 
 /* ---------------- landing ---------------- */
 
-function HowItWorks() {
+function LandingNav() {
   return (
-    <section className="how-compact fade-up fade-up-1" aria-label="how it works">
-      <span className="eyebrow">how it works</span>
-      <div className="how-chain">
-        <b>Say it</b>
-        <span>→</span>
-        <b>Stake it</b>
-        <span>→</span>
-        <b>Prove it</b>
-      </div>
-      <p>one promise, real money, one friend watching the truth.</p>
-    </section>
+    <div className="landing-nav">
+      <img className="brand-wordmark" src="/wordmark.png" alt="assert" />
+      <ConnectButton label="Enter app →" />
+    </div>
   );
 }
 
@@ -1172,54 +1165,44 @@ function LandingAssertCard() {
         <span className="assert-pill live">LIVE</span>
         <b>0.50 ETH</b>
       </div>
-      <h2>Gym 4x this week</h2>
+      <h2>Gym 4× this week</h2>
       <div className="landing-progress" aria-hidden="true">
         <span />
       </div>
       <div className="landing-metrics">
         <div><span>referee</span><b>Josh</b></div>
-        <div><span>progress</span><b>3 / 4</b></div>
+        <div><span>progress</span><b>3/4</b></div>
         <div><span>left</span><b>22h</b></div>
       </div>
-      <div className="landing-fold-copy">fold and Josh gets your 0.5 ETH.</div>
+      <div className="landing-fold-copy">Miss it and Josh gets your 0.50 ETH.</div>
     </section>
   );
 }
+
+const LANDING_ACTIVITY = [
+  { who: 'Josh', body: 'completed Gym 4× this week', meta: 'Mia approved it · 20m ago', badge: 'WON' },
+  { who: 'Mia', body: 'put 0.03 ETH on reading daily', meta: 'deadline in 7 days', badge: 'LIVE' },
+  { who: 'Ade', body: 'locked 0.10 ETH on no nicotine', meta: 'Sam refereeing · day 5', badge: 'LIVE' },
+  { who: 'Liv', body: 'folded on her 6am run', meta: 'referee got paid', badge: 'FOLDED' },
+  { who: 'Noah', body: 'proved 5 deep work blocks', meta: 'stake returned', badge: 'WON' },
+];
 
 function LandingActivity() {
   return (
-    <section className="landing-panel landing-activity fade-up fade-up-3" aria-label="recent assert activity">
+    <section id="people" className="landing-panel landing-activity fade-up fade-up-3" aria-label="recent assert activity">
       <div className="section-head clean">
         <h2 className="section-title">people are asserting</h2>
       </div>
-      <div className="activity-row static">
-        <div className="avatar">J</div>
-        <div>
-          <p><b>Josh</b> completed <strong>Gym 4x this week</strong></p>
-          <span>Mia approved it · 20m ago</span>
+      {LANDING_ACTIVITY.map((item) => (
+        <div className={`activity-row static ${item.badge.toLowerCase()}`} key={`${item.who}-${item.body}`}>
+          <div className="avatar">{item.who[0]}</div>
+          <div>
+            <p><b>{item.who}</b> <strong>{item.body}</strong></p>
+            <span>{item.meta}</span>
+          </div>
+          <div className="activity-side"><b>{item.badge}</b></div>
         </div>
-        <div className="activity-side"><b>WON</b></div>
-      </div>
-      <div className="activity-row static">
-        <div className="avatar">M</div>
-        <div>
-          <p><b>Mia</b> put <strong>0.03 ETH on reading daily</strong></p>
-          <span>deadline in 7 days</span>
-        </div>
-        <div className="activity-side"><b>LIVE</b></div>
-      </div>
-    </section>
-  );
-}
-
-function LandingConsequence() {
-  return (
-    <section className="landing-consequence fade-up fade-up-4">
-      <h2>talk is free. folding isn't.</h2>
-      <div className="consequence-grid">
-        <div className="consequence-card win"><span>YOU WIN</span><b>stake comes back</b></div>
-        <div className="consequence-card lose"><span>YOU FOLD</span><b>friend gets paid</b></div>
-      </div>
+      ))}
     </section>
   );
 }
@@ -1227,9 +1210,8 @@ function LandingConsequence() {
 function LandingFinalCta() {
   return (
     <section className="landing-final fade-up fade-up-4">
-      <h2>still sure you're gonna do it?</h2>
-      <ConnectButton label="+ Create an assert" />
-      <p>back yourself.</p>
+      <h2>you still just gonna say you'll do it?</h2>
+      <ConnectButton label="Assert it →" />
     </section>
   );
 }
@@ -1257,28 +1239,28 @@ export default function App() {
   return (
     <div className="page">
       <div className="aurora" aria-hidden="true" />
-      <header />
+      <header>{!isConnected ? <LandingNav /> : null}</header>
 
       {!isConnected ? (
         <>
           <section className="hero landing-hero">
             <div className="hero-inner landing-hero-inner">
               <div className="landing-copy">
-                <img className="hero-wordmark fade-up" src="/wordmark.png" alt="assert" />
                 <h1 className="fade-up fade-up-1">assert it, or fold.</h1>
                 <p className="lead fade-up fade-up-2">
                   Put money behind your word. Hit the goal, keep it. Bail, your friend gets paid.
                 </p>
-                <ConnectButton label="Create an assert" />
+                <div className="hero-actions fade-up fade-up-3">
+                  <ConnectButton label="Assert something →" />
+                  <a className="btn secondary" href="#people">See what friends are asserting ↓</a>
+                </div>
               </div>
-              <LandingAssertCard />
             </div>
+            <LandingAssertCard />
           </section>
 
           <main className="landing-main">
-            <HowItWorks />
             <LandingActivity />
-            <LandingConsequence />
             <LandingFinalCta />
           </main>
         </>
@@ -1322,7 +1304,11 @@ export default function App() {
         </main>
       )}
 
-      <footer className="muted">assert — on your honor, onchain.</footer>
+      <footer className="muted">
+        <span>Assert</span>
+        <span>built on Base</span>
+        <a href="https://base.org" target="_blank" rel="noreferrer">base.org</a>
+      </footer>
     </div>
   );
 }
