@@ -306,18 +306,11 @@ export default function App() {
   return (
     <div className="page">
       <header>
-        <div className="brand">
-          <img className="brand-logo" src="/logo.png" alt="Assert" />
-          <img className="brand-wordmark" src="/wordmark.png" alt="assert" />
-          <span className="tagline">assert it. or fold.</span>
-        </div>
+        <img className="brand-wordmark" src="/wordmark.png" alt="assert" />
         <ConnectButton />
       </header>
       {!isConnected ? (
         <section className="hero">
-          <div className="hero-accent">
-            <img src="/logo.png" alt="" />
-          </div>
           <div className="hero-inner">
             <h1>
               assert it,
@@ -328,9 +321,6 @@ export default function App() {
               stake money on your own goals. a friend referees the truth. hit the deadline and it's yours —
               miss it and they take it home. enforced by code on base, no excuses.
             </p>
-            <div className="hero-cta">
-              <ConnectButton label="connect wallet to start" />
-            </div>
             <HowItWorks />
           </div>
         </section>
