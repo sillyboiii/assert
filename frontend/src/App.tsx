@@ -34,20 +34,6 @@ type CreatedArgs = {
 const short = (a: `0x${string}` | undefined) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '');
 const fmt = (w: bigint) => `${Number(formatEther(w)).toFixed(3)} ETH`;
 
-function SplitMark({ size = 28, bare = false }: { size?: number; bare?: boolean }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
-      {!bare && (
-        <rect x="1" y="1" width="62" height="62" rx="18" fill="#E9E7FA" stroke="#E5E0F4" strokeWidth="2" />
-      )}
-      <path d="M17 45 L31 20" stroke="#6965E8" strokeWidth="10" strokeLinecap="round" />
-      <path d="M33 20 L47 45" stroke="#25214F" strokeWidth="10" strokeLinecap="round" />
-      <path d="M21.5 38 H28" stroke="#FFFFFF" strokeWidth="7" strokeLinecap="round" />
-      <path d="M36 38 H42.5" stroke="#FFFFFF" strokeWidth="7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function ConnectButton({ label = 'Connect wallet' }: { label?: string }) {
   const { isConnected, address } = useAccount();
   const { connect, connectors, isPending } = useConnect();
@@ -272,11 +258,9 @@ export default function App() {
     <div className="page">
       <header>
         <div className="brand">
-          <span className="mark">
-            <SplitMark size={44} />
-          </span>
+          <img className="brand-logo" src="/logo.png" alt="Assert" />
           <span className="brand-stack">
-            <span className="brand-name">assert</span>
+            <img className="brand-wordmark" src="/wordmark.png" alt="assert" />
             <span className="tagline">assert it. or fold.</span>
           </span>
         </div>
@@ -285,7 +269,7 @@ export default function App() {
       {!isConnected ? (
         <section className="hero">
           <div className="hero-accent">
-            <SplitMark size={460} bare />
+            <img src="/logo.png" alt="" />
           </div>
           <div className="hero-inner">
             <h1>
