@@ -1190,17 +1190,8 @@ function LandingActivity() {
 }
 
 function LandingCardStack() {
-  const item = LANDING_ACTIVITY[1];
   return (
     <div className="landing-card-stack">
-      <div className={`activity-row static hero-activity ${item.badge.toLowerCase()}`}>
-        <div className="avatar">{item.who[0]}</div>
-        <div>
-          <p><b>{item.who}</b> <strong>{item.body}</strong></p>
-          <span>{item.meta}</span>
-        </div>
-        <div className="activity-side"><b>{item.badge}</b></div>
-      </div>
       <LandingAssertCard />
     </div>
   );
