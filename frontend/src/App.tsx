@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, getAbiItem, getAddress, http, parseUnits, formatEther } from 'viem';
 import { base, mainnet } from 'viem/chains';
@@ -658,6 +658,8 @@ const SOCIAL_ACTIVITY = [
   { who: 'Liv', action: 'folded', body: 'missed her 6am run', meta: 'referee got paid' },
 ];
 
+type AppMode = 'intro' | 'home' | 'asserts' | 'builder' | 'friends' | 'you';
+
 function DisciplineHome({
   allGoals,
   myGoals,
@@ -770,14 +772,38 @@ function DisciplineHome({
   );
 }
 
-function BottomNav({ onCreate }: { onCreate: () => void }) {
+function SimpleTab({ title, copy, children }: { title: string; copy: string; children?: ReactNode }) {
+  return (
+    <div className="social-app fade-up">
+      <section className="simple-tab-card">
+        <span className="eyebrow">assert</span>
+        <h2>{title}</h2>
+        <p>{copy}</p>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function BottomNav({ active, onSelect }: { active: AppMode; onSelect: (mode: AppMode) => void }) {
+  const items: { label: string; mode: AppMode }[] = [
+    { label: 'Home', mode: 'home' },
+    { label: 'Asserts', mode: 'asserts' },
+    { label: '+', mode: 'builder' },
+    { label: 'Friends', mode: 'friends' },
+    { label: 'You', mode: 'you' },
+  ];
   return (
     <nav className="bottom-nav" aria-label="app navigation">
-      <button>Home</button>
-      <button>Asserts</button>
-      <button className="nav-plus" onClick={onCreate}>+</button>
-      <button>Friends</button>
-      <button>You</button>
+      {items.map((item) => (
+        <button
+          key={item.mode}
+          className={`${item.mode === 'builder' ? 'nav-plus' : ''}${active === item.mode ? ' active' : ''}`}
+          onClick={() => onSelect(item.mode)}
+        >
+          {item.label}
+        </button>
+      ))}
     </nav>
   );
 }
@@ -995,7 +1021,7 @@ function HowItWorks() {
 
 export default function App() {
   const { isConnected, chainId, address } = useAccount();
-  const [appMode, setAppMode] = useState<'intro' | 'home' | 'builder'>('intro');
+  const [appMode, setAppMode] = useState<AppMode>('intro');
   const onKnownChain = chainId === 8453 || chainId === 84532;
   const { data: allGoals, isLoading: loadingGoals } = useAllCreated();
 
@@ -1045,7 +1071,37 @@ export default function App() {
           {invited ? null : appMode === 'intro' ? (
             <ConnectedIntro onStart={() => setAppMode('home')} />
           ) : appMode === 'builder' ? (
-            <CreateWizard onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
+            <div className="create-screen fade-up">
+              <CreateWizard onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
+            </div>
+          ) : appMode === 'asserts' ? (
+            <SimpleTab title="your asserts" copy="every promise you have live, pending, won or folded.">
+              {loadingGoals ? (
+                <p className="muted">loading asserts…</p>
+              ) : myGoals.length ? (
+                <div className="goal-grid compact">
+                  {myGoals.map((g) => <GoalCard key={g.id.toString()} id={g.id.toString()} />)}
+                </div>
+              ) : (
+                <p className="empty-copy">no active asserts yet. hit + and send one to a friend.</p>
+              )}
+            </SimpleTab>
+          ) : appMode === 'friends' ? (
+            <SimpleTab title="friends" copy="soon this becomes your referee list, invite links and people watching your asserts.">
+              <div className="activity-panel embedded">
+                {SOCIAL_ACTIVITY.map((item) => (
+                  <div className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`}>
+                    <div className="avatar">{item.who[0]}</div>
+                    <div>
+                      <p><b>{item.who}</b> {item.action} <strong>{item.body}</strong></p>
+                      <span>{item.meta}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SimpleTab>
+          ) : appMode === 'you' ? (
+            <SimpleTab title="you" copy="your accountability profile. clean for now, sharper once real asserts start coming in." />
           ) : (
             <DisciplineHome
               allGoals={allGoals}
@@ -1062,7 +1118,7 @@ export default function App() {
               onClose={() => setInviteId(null)}
             />
           ) : null}
-          {appMode !== 'intro' && !invited ? <BottomNav onCreate={() => setAppMode('builder')} /> : null}
+          {appMode !== 'intro' && !invited ? <BottomNav active={appMode} onSelect={setAppMode} /> : null}
         </main>
       )}
 
