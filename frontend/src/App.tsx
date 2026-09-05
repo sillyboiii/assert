@@ -1160,7 +1160,7 @@ function LandingNav() {
 
 function LandingAssertCard() {
   return (
-    <section className="landing-phone fade-up fade-up-2" aria-label="example assert">
+    <section className="landing-phone main-live fade-up fade-up-2" aria-label="example assert">
       <div className="landing-phone-top">
         <span className="assert-pill live">LIVE</span>
         <b>0.50 ETH</b>
@@ -1179,6 +1179,16 @@ function LandingAssertCard() {
   );
 }
 
+function LandingMiniAssert({ title, stake, badge, className }: { title: string; stake: string; badge: string; className: string }) {
+  return (
+    <div className={`landing-mini-assert ${className} ${badge.toLowerCase()}`}>
+      <span>{badge}</span>
+      <h3>{title}</h3>
+      <b>{stake}</b>
+    </div>
+  );
+}
+
 const LANDING_ACTIVITY = [
   { who: 'Josh', body: 'completed Gym 4× this week', meta: 'Mia approved it · 20m ago', badge: 'WON' },
   { who: 'Mia', body: 'put 0.03 ETH on reading daily', meta: 'deadline in 7 days', badge: 'LIVE' },
@@ -1189,11 +1199,7 @@ const LANDING_ACTIVITY = [
 
 function LandingActivity() {
   return (
-    <section id="people" className="landing-activity fade-up fade-up-3" aria-label="recent assert activity">
-      <div className="feed-heading">
-        <h2 className="section-title">people are asserting</h2>
-        <p>live promises, wins, and folds from inside Assert.</p>
-      </div>
+    <div id="people" className="landing-activity fade-up fade-up-3" aria-label="recent assert activity">
       {LANDING_ACTIVITY.map((item, index) => (
         <div className={`activity-row static floating-row row-${index + 1} ${item.badge.toLowerCase()}`} key={`${item.who}-${item.body}`}>
           <div className="avatar">{item.who[0]}</div>
@@ -1204,14 +1210,26 @@ function LandingActivity() {
           <div className="activity-side"><b>{item.badge}</b></div>
         </div>
       ))}
-    </section>
+    </div>
+  );
+}
+
+function LandingProductCluster() {
+  return (
+    <div className="landing-product-cluster">
+      <LandingAssertCard />
+      <LandingMiniAssert title="read daily" stake="0.03 ETH" badge="LIVE" className="mini-a" />
+      <LandingMiniAssert title="no nicotine" stake="0.10 ETH" badge="WON" className="mini-b" />
+      <LandingMiniAssert title="6am run" stake="FOLDED" badge="FOLDED" className="mini-c" />
+      <LandingActivity />
+    </div>
   );
 }
 
 function LandingFinalCta() {
   return (
     <section className="landing-final fade-up fade-up-4">
-      <h2>you still just gonna say you'll do it?</h2>
+      <h2>Still sure?</h2>
       <ConnectButton label="Assert it →" />
       <div className="landing-footer">
         <span>Assert</span>
@@ -1253,20 +1271,22 @@ export default function App() {
             <div className="hero-inner landing-hero-inner">
               <div className="landing-copy">
                 <h1 className="fade-up fade-up-1">assert it, or fold.</h1>
-                <p className="lead fade-up fade-up-2">
-                  Put money behind your word. Hit the goal, keep it. Bail, your friend gets paid.
-                </p>
+                <p className="lead fade-up fade-up-2">Put money behind your word.</p>
+                <p className="hero-line fade-up fade-up-2">Your friend calls it.</p>
                 <div className="hero-actions fade-up fade-up-3">
                   <ConnectButton label="Assert something →" />
                   <a className="btn secondary" href="#people">See what friends are asserting ↓</a>
                 </div>
               </div>
+              <LandingProductCluster />
             </div>
-            <LandingAssertCard />
           </section>
 
           <main className="landing-main">
-            <LandingActivity />
+            <section className="landing-type-flow" aria-hidden="true">
+              <span>PUT SOMETHING</span>
+              <b>ON IT.</b>
+            </section>
             <LandingFinalCta />
           </main>
         </>
