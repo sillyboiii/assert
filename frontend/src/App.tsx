@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getAbiItem, parseUnits, formatEther } from 'viem';
 import {
@@ -34,10 +35,64 @@ type CreatedArgs = {
 const short = (a: `0x${string}` | undefined) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '');
 const fmt = (w: bigint) => `${Number(formatEther(w)).toFixed(3)} ETH`;
 
+function walletMeta(id?: string): { name: string; initial: string; color: string } {
+  switch (id) {
+    case 'coinbaseWalletSDK':
+      return { name: 'Coinbase Wallet', initial: 'C', color: '#0052FF' };
+    case 'walletConnect':
+      return { name: 'WalletConnect', initial: 'W', color: '#3B99FC' };
+    case 'injected':
+      return { name: 'Browser wallet', initial: '⬡', color: 'var(--indigo)' };
+    case 'mock':
+      return { name: 'Demo wallet', initial: 'D', color: 'var(--blue)' };
+    default:
+      return { name: id ?? 'Wallet', initial: '•', color: 'var(--muted)' };
+  }
+}
+
+function ConnectModal({ onClose }: { onClose: () => void }) {
+  const { connect, connectors, isPending } = useConnect();
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="choose a wallet"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-head">
+          <h2>connect a wallet</h2>
+          <button className="modal-close" onClick={onClose} aria-label="close">
+            ×
+          </button>
+        </div>
+        <p className="modal-sub muted">
+          your keys stay in your wallet. we only read your address and ask you to approve payments — nothing else.
+        </p>
+        <div className="wallet-list">
+          {connectors.map((c) => {
+            const meta = walletMeta(c.id);
+            return (
+              <button key={c.uid} className="wallet-row" onClick={() => connect({ connector: c })} disabled={isPending}>
+                <span className="wallet-ico" style={{ background: meta.color }}>
+                  {meta.initial}
+                </span>
+                <span className="wallet-name">{meta.name}</span>
+                <span className="wallet-cta">{isPending ? 'connecting…' : '→'}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ConnectButton({ label = 'Connect wallet' }: { label?: string }) {
   const { isConnected, address } = useAccount();
-  const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
+  const [open, setOpen] = useState(false);
 
   if (isConnected) {
     return (
@@ -46,18 +101,12 @@ function ConnectButton({ label = 'Connect wallet' }: { label?: string }) {
       </button>
     );
   }
-  const connector = connectors.find((c) => c.id === 'coinbaseWalletSDK') ?? connectors[0];
-  const demo = connectors.find((c) => c.id === 'mock');
   return (
     <div className="conn-row">
-      <button className="btn-primary" onClick={() => connect({ connector })} disabled={isPending}>
-        {isPending ? 'Connecting…' : label}
+      <button className="btn-primary" onClick={() => setOpen(true)}>
+        {label}
       </button>
-      {demo && (
-        <button className="btn ghost" onClick={() => connect({ connector: demo })} disabled={isPending}>
-          Demo wallet
-        </button>
-      )}
+      {open && <ConnectModal onClose={() => setOpen(false)} />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { http, createConfig, type CreateConnectorFn } from 'wagmi';
 import { base, baseSepolia } from 'wagmi/chains';
-import { coinbaseWallet, injected, mock } from 'wagmi/connectors';
+import { coinbaseWallet, injected, mock, walletConnect } from 'wagmi/connectors';
 import { createClient } from 'viem';
 
 const chains = [base, baseSepolia] as const;
@@ -10,9 +10,18 @@ const rpcOverride = import.meta.env.VITE_RPC_URL as string | undefined;
 const connectors: CreateConnectorFn[] = [
   coinbaseWallet({
     appName: 'Assert',
+    preference: { options: 'all' },
   }),
   injected(),
 ];
+if (import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID) {
+  connectors.push(
+    walletConnect({
+      projectId: import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID,
+      showQrModal: true,
+    }),
+  );
+}
 if (import.meta.env.VITE_ENABLE_DEMO_WALLET === 'true') {
   connectors.push(mock({ accounts: [import.meta.env.VITE_DEMO_ADDRESS as `0x${string}`] }));
 }
