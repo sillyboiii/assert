@@ -178,29 +178,72 @@ function useAllCreated() {
 
 /* ---------------- wizard ---------------- */
 
-function Step1Goal({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+const ASSERT_TEMPLATES = [
+  { label: 'body', goal: 'train 4x a week for 30 days', proof: 'send gym check-in photos or workout logs every week' },
+  { label: 'focus', goal: 'no doomscrolling before noon for 14 days', proof: 'share screen time screenshots every night' },
+  { label: 'ship', goal: 'ship my project by friday', proof: 'send the live link and public changelog to my referee' },
+  { label: 'discipline', goal: 'wake up before 7am every day for 21 days', proof: 'send a timestamped morning photo each day' },
+];
+
+function Step1Goal({
+  goal,
+  setGoal,
+  proof,
+  setProof,
+}: {
+  goal: string;
+  setGoal: (v: string) => void;
+  proof: string;
+  setProof: (v: string) => void;
+}) {
   return (
     <div className="fade-up-1">
+      <div className="builder-copy">
+        <span className="eyebrow">identity check</span>
+        <h3>who are you trying to become?</h3>
+        <p className="muted">make the promise specific enough that your referee can call it without drama.</p>
+      </div>
       <label>
-        what are you asserting?
+        your assert
         <textarea
           className="goal-input"
           name="goal"
           maxLength={280}
           rows={3}
-          placeholder="no junk food for 30 days…"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          placeholder="train 4x a week for 30 days…"
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
           autoFocus
         />
       </label>
-      <p className="char-count">{value.length}/280</p>
-      <div className="referee-suggest">
-        <span>💪 get shredded</span>
-        <span>📵 no doomscrolling</span>
-        <span>📚 study 2h a day</span>
-        <span>🏃 run a 5k</span>
-        <span>🚭 quit smoking</span>
+      <p className="char-count">{goal.length}/280</p>
+      <label className="proof-label">
+        proof standard
+        <textarea
+          className="goal-input proof-input"
+          name="proof"
+          maxLength={180}
+          rows={2}
+          placeholder="what evidence should your referee expect?"
+          value={proof}
+          onChange={(e) => setProof(e.target.value)}
+        />
+      </label>
+      <div className="template-grid">
+        {ASSERT_TEMPLATES.map((t) => (
+          <button
+            key={t.label}
+            type="button"
+            className="template-chip"
+            onClick={() => {
+              setGoal(t.goal);
+              setProof(t.proof);
+            }}
+          >
+            <span>{t.label}</span>
+            <b>{t.goal}</b>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -287,11 +330,15 @@ function Step3Stake({
   setStake,
   days,
   setDays,
+  intensity,
+  setIntensity,
 }: {
   stake: string;
   setStake: (s: string) => void;
   days: number;
   setDays: (d: number) => void;
+  intensity: string;
+  setIntensity: (v: string) => void;
 }) {
   const amt = parseFloat(stake) || 0;
   const fee = (amt * Number(FEE_BPS)) / 10_000;
@@ -304,8 +351,35 @@ function Step3Stake({
     { d: 14, label: '14 days' },
     { d: 30, label: '30 days' },
   ];
+  const modes = [
+    { name: 'soft mode', stake: '0.01', copy: 'prove the idea' },
+    { name: 'serious mode', stake: '0.1', copy: 'make excuses hurt' },
+    { name: 'no excuses', stake: '0.5', copy: 'this is who you are now' },
+  ];
   return (
     <div className="fade-up-1">
+      <div className="builder-copy">
+        <span className="eyebrow">pressure setting</span>
+        <h3>how expensive should folding be?</h3>
+        <p className="muted">pick a mode or type your own stake. bigger pot, louder promise.</p>
+      </div>
+      <div className="intensity-grid">
+        {modes.map((m) => (
+          <button
+            key={m.name}
+            type="button"
+            className={`intensity-card${intensity === m.name ? ' on' : ''}`}
+            onClick={() => {
+              setIntensity(m.name);
+              setStake(m.stake);
+            }}
+          >
+            <span>{m.name}</span>
+            <b>{m.stake} ETH</b>
+            <small>{m.copy}</small>
+          </button>
+        ))}
+      </div>
       <label>
         how much are you putting up? (eth)
         <input
@@ -356,11 +430,68 @@ function Step3Stake({
   );
 }
 
+function Step4Review({
+  goal,
+  proof,
+  referee,
+  stake,
+  days,
+}: {
+  goal: string;
+  proof: string;
+  referee: string;
+  stake: string;
+  days: number;
+}) {
+  const amt = parseFloat(stake) || 0;
+  const fee = (amt * Number(FEE_BPS)) / 10_000;
+  const refund = amt - fee;
+  const fmtNum = (n: number) => String(n.toFixed(3)).replace(/\.?0+$/, '');
+  return (
+    <div className="review-card fade-up-1">
+      <span className="eyebrow">final check</span>
+      <h3>read this like a contract with yourself.</h3>
+      <div className="review-line big">
+        <span>i assert</span>
+        <b>{goal}</b>
+      </div>
+      <div className="review-line">
+        <span>proof</span>
+        <b>{proof}</b>
+      </div>
+      <div className="review-line">
+        <span>referee</span>
+        <b>{referee}</b>
+      </div>
+      <div className="review-split">
+        <div>
+          <span>stake</span>
+          <b>{fmtNum(amt)} ETH</b>
+        </div>
+        <div>
+          <span>deadline</span>
+          <b>{days} days</b>
+        </div>
+        <div>
+          <span>if you hit it</span>
+          <b>{fmtNum(refund)} ETH back</b>
+        </div>
+        <div>
+          <span>if you fold</span>
+          <b>referee gets {fmtNum(refund)} ETH</b>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
   const [step, setStep] = useState(0);
   const [goal, setGoal] = useState('');
+  const [proof, setProof] = useState('');
   const [referee, setReferee] = useState('');
   const [stake, setStake] = useState('');
+  const [intensity, setIntensity] = useState('');
   const [days, setDays] = useState(7);
   const [error, setError] = useState('');
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
@@ -368,7 +499,8 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
   const { writeContractAsync, isPending } = useWriteContract();
   const publicClient = usePublicClient();
 
-  const stepsLabel = ['the goal', 'the referee', 'the stakes'];
+  const stepsLabel = ['identity', 'referee', 'pressure', 'review'];
+  const goalText = `${goal.trim()}\n\nProof standard: ${proof.trim()}`;
 
   const refereeResult = (() => {
     if (resolvedReferee) return { ok: true, addr: resolvedReferee };
@@ -384,7 +516,13 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
   })();
 
   const canNext =
-    step === 0 ? goal.trim().length > 0 : step === 1 ? refereeResult.ok : parseFloat(stake) >= 0.001;
+    step === 0
+      ? goal.trim().length > 0 && proof.trim().length > 0
+      : step === 1
+        ? refereeResult.ok && !refereeResult.ensOnly
+        : step === 2
+          ? parseFloat(stake) >= 0.001
+          : true;
 
   const submit = async () => {
     setError('');
@@ -394,7 +532,7 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
         address: COMMITMENT_ADDRESS,
         abi: commitmentAbi,
         functionName: 'createGoal',
-        args: [goal.trim(), refereeResult.addr!, deadline],
+        args: [goalText, refereeResult.addr!, deadline],
         value: parseUnits(stake, 18),
       });
       setTxHash(gh);
@@ -445,9 +583,19 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
         </div>
       </div>
 
-      {step === 0 && <Step1Goal value={goal} onChange={setGoal} />}
+      {step === 0 && <Step1Goal goal={goal} setGoal={setGoal} proof={proof} setProof={setProof} />}
       {step === 1 && <Step2Referee value={referee} onChange={setReferee} onResolved={setResolvedReferee} />}
-      {step === 2 && <Step3Stake stake={stake} setStake={setStake} days={days} setDays={setDays} />}
+      {step === 2 && (
+        <Step3Stake
+          stake={stake}
+          setStake={setStake}
+          days={days}
+          setDays={setDays}
+          intensity={intensity}
+          setIntensity={setIntensity}
+        />
+      )}
+      {step === 3 && <Step4Review goal={goal} proof={proof} referee={refereeResult.addr ?? referee} stake={stake} days={days} />}
 
       {error && <p className="muted" style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
       {txHash && !isPending && (
@@ -464,7 +612,7 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
         ) : (
           <span />
         )}
-        {step < 2 ? (
+        {step < 3 ? (
           <button
             type="button"
             className="btn-primary"
@@ -480,6 +628,27 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
         )}
       </div>
     </form>
+  );
+}
+
+function ConnectedIntro({ onStart }: { onStart: () => void }) {
+  return (
+    <section className="intro-card fade-up">
+      <span className="eyebrow">wallet connected</span>
+      <h2>you ready to become a more disciplined version of yourself?</h2>
+      <p>
+        assert is where excuses get expensive. write one commitment, put real money behind it,
+        and let someone you trust hold the line.
+      </p>
+      <div className="intro-points">
+        <span>name the identity</span>
+        <span>set the proof</span>
+        <span>stake the consequence</span>
+      </div>
+      <button className="btn-primary intro-start" onClick={onStart}>
+        start my assert →
+      </button>
+    </section>
   );
 }
 
@@ -696,6 +865,7 @@ function HowItWorks() {
 
 export default function App() {
   const { isConnected, chainId, address } = useAccount();
+  const [builderStarted, setBuilderStarted] = useState(false);
   const onKnownChain = chainId === 8453 || chainId === 84532;
   const { data: allGoals, isLoading: loadingGoals } = useAllCreated();
 
@@ -738,7 +908,11 @@ export default function App() {
           {invited ? (
             <GoalCard id={invited} />
           ) : null}
-          <CreateWizard onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
+          {!builderStarted && !invited ? (
+            <ConnectedIntro onStart={() => setBuilderStarted(true)} />
+          ) : (
+            <CreateWizard onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
+          )}
           {inviteId ? (
             <ShareInvite
               id={BigInt(inviteId)}

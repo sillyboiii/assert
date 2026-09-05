@@ -307,6 +307,75 @@ main {
 
 /* ---------- create wizard ---------- */
 
+.intro-card {
+  max-width: 760px;
+  background:
+    radial-gradient(circle at 14% 18%, rgba(105, 101, 232, 0.18), transparent 32%),
+    linear-gradient(145deg, var(--indigo), #382f78 48%, var(--blue-deep));
+  color: var(--white);
+  border-radius: 34px;
+  padding: clamp(28px, 5vw, 48px);
+  box-shadow: 0 28px 80px rgba(37, 33, 79, 0.28);
+  overflow: hidden;
+  position: relative;
+}
+
+.intro-card::after {
+  content: '';
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  right: -86px;
+  bottom: -96px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.intro-card .eyebrow,
+.intro-card p {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.intro-card h2 {
+  max-width: 640px;
+  margin: 10px 0 14px;
+  font-family: var(--font-display);
+  font-size: clamp(38px, 7vw, 82px);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  text-transform: lowercase;
+}
+
+.intro-card p {
+  max-width: 560px;
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.intro-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 24px 0;
+}
+
+.intro-points span {
+  padding: 9px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.intro-start {
+  position: relative;
+  z-index: 1;
+  background: var(--white);
+  color: var(--indigo);
+}
+
 .create-form {
   display: flex;
   flex-direction: column;
@@ -411,6 +480,92 @@ select:focus {
   min-height: 96px;
 }
 
+.proof-label {
+  margin-top: 12px;
+}
+
+.proof-input {
+  min-height: 78px;
+  font-size: 18px;
+}
+
+.builder-copy {
+  margin-bottom: 16px;
+}
+
+.builder-copy h3,
+.review-card h3 {
+  margin: 8px 0 6px;
+  font-family: var(--font-display);
+  font-size: 32px;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  text-transform: lowercase;
+}
+
+.builder-copy p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.template-grid,
+.intensity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.template-chip,
+.intensity-card {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  border: 1px solid rgba(105, 101, 232, 0.16);
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 18px;
+  padding: 14px;
+  color: var(--indigo);
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.18s ease;
+}
+
+.template-chip:hover,
+.intensity-card:hover,
+.intensity-card.on {
+  border-color: var(--blue);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px rgba(37, 33, 79, 0.08);
+}
+
+.template-chip span,
+.intensity-card span,
+.review-line span,
+.review-split span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.template-chip b,
+.intensity-card b {
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.1;
+  text-transform: lowercase;
+}
+
+.intensity-card small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.intensity-card.on {
+  background: rgba(105, 101, 232, 0.1);
+}
+
 .char-count {
   font-size: 12px;
   color: var(--muted);
@@ -497,6 +652,47 @@ select:focus {
 .ens-hint {
   font-size: 12px;
   color: var(--green);
+}
+
+.review-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(105, 101, 232, 0.14);
+}
+
+.review-line,
+.review-split > div {
+  display: grid;
+  gap: 4px;
+  padding: 15px 16px;
+  border-radius: 16px;
+  background: var(--white);
+}
+
+.review-line.big b {
+  font-size: 24px;
+}
+
+.review-line b,
+.review-split b {
+  font-family: var(--font-display);
+  line-height: 1.15;
+  text-transform: lowercase;
+}
+
+.review-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 680px) {
+  .review-split {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---------- share invite ---------- */
