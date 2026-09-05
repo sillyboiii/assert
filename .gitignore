@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env*
+broadcast/
+cache/
+out/
+.DS_Store
+vercel/
+.vercel
