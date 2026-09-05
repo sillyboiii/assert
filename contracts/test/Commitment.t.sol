@@ -27,7 +27,7 @@ contract CommitmentTest is Test {
 
     function _create() internal returns (uint256) {
         vm.prank(creator);
-        return c.createGoal{value: stake}(referee, _deadline());
+        return c.createGoal{value: stake}("no junk food for 30 days", referee, _deadline());
     }
 
     function _accept(uint256 id) internal {
@@ -37,9 +37,10 @@ contract CommitmentTest is Test {
 
     function test_CreateGoal_SetsFields() public {
         uint256 id = _create();
-        (address c_, address r, uint256 amount, uint256 fee, uint256 dl, Commitment.Status s) = c.goals(id);
+        (address c_, address r, string memory goal, uint256 amount, uint256 fee, uint256 dl, Commitment.Status s) = c.goals(id);
         assertEq(c_, creator);
         assertEq(r, referee);
+        assertEq(goal, "no junk food for 30 days");
         assertEq(amount, stake);
         assertEq(fee, stake * FEE_BPS / 10_000);
         assertEq(dl, _deadline());
@@ -48,50 +49,56 @@ contract CommitmentTest is Test {
 
     function test_CreateGoal_EmitsEvent() public {
         vm.expectEmit(true, true, false, true, address(c));
-        emit Commitment.Created(0, creator, referee, stake, _deadline());
+        emit Commitment.Created(0, creator, referee, "no junk food for 30 days", stake, _deadline());
         _create();
     }
 
     function test_Revert_WhenSelfReferee() public {
         vm.prank(creator);
         vm.expectRevert(Commitment.SelfReferee.selector);
-        c.createGoal{value: stake}(creator, _deadline());
+        c.createGoal{value: stake}("x", creator, _deadline());
     }
 
     function test_Revert_WhenRefereeZero() public {
         vm.prank(creator);
         vm.expectRevert(Commitment.SelfReferee.selector);
-        c.createGoal{value: stake}(address(0), _deadline());
+        c.createGoal{value: stake}("x", address(0), _deadline());
     }
 
     function test_Revert_WhenStakeBelowMin() public {
         vm.prank(creator);
         vm.expectRevert(Commitment.InvalidStake.selector);
-        c.createGoal{value: MIN_STAKE - 1}(referee, _deadline());
+        c.createGoal{value: MIN_STAKE - 1}("x", referee, _deadline());
     }
 
     function test_Revert_WhenStakeAboveMax() public {
         vm.prank(creator);
         vm.expectRevert(Commitment.InvalidStake.selector);
-        c.createGoal{value: MAX_STAKE + 1}(referee, _deadline());
+        c.createGoal{value: MAX_STAKE + 1}("x", referee, _deadline());
     }
 
     function test_Revert_WhenDeadlineTooSoon() public {
         vm.prank(creator);
         vm.expectRevert(Commitment.DeadlineOutOfRange.selector);
-        c.createGoal{value: stake}(referee, block.timestamp + 59 minutes);
+        c.createGoal{value: stake}("x", referee, block.timestamp + 59 minutes);
+    }
+
+    function test_Revert_WhenGoalTooLong() public {
+        vm.prank(creator);
+        vm.expectRevert(Commitment.GoalTooLong.selector);
+        c.createGoal{value: stake}(string(new bytes(281)), referee, _deadline());
     }
 
     function test_Revert_WhenDeadlineTooFar() public {
         vm.prank(creator);
         vm.expectRevert(Commitment.DeadlineOutOfRange.selector);
-        c.createGoal{value: stake}(referee, block.timestamp + 366 days);
+        c.createGoal{value: stake}("x", referee, block.timestamp + 366 days);
     }
 
     function test_AcceptRole_Activates() public {
         uint256 id = _create();
         _accept(id);
-        (, , , , , Commitment.Status s) = c.goals(id);
+        (, , , , , , Commitment.Status s) = c.goals(id);
         assertEq(uint8(s), uint8(Commitment.Status.Active));
     }
 
@@ -128,7 +135,7 @@ contract CommitmentTest is Test {
 
         assertEq(address(c).balance, 0);
         assertEq(creator.balance, 10 ether);
-        (, , , , , Commitment.Status s) = c.goals(id);
+        (, , , , , , Commitment.Status s) = c.goals(id);
         assertEq(uint8(s), uint8(Commitment.Status.Cancelled));
     }
 
@@ -161,7 +168,7 @@ contract CommitmentTest is Test {
         assertEq(creator.balance, creatorBefore + stake - fee);
         assertEq(treasury.balance, treasuryBefore + fee);
         assertEq(address(c).balance, 0);
-        (, , , , , Commitment.Status s) = c.goals(id);
+        (, , , , , , Commitment.Status s) = c.goals(id);
         assertEq(uint8(s), uint8(Commitment.Status.Approved));
     }
 
@@ -203,7 +210,7 @@ contract CommitmentTest is Test {
         assertEq(referee.balance, refereeBefore + stake - fee);
         assertEq(treasury.balance, treasuryBefore + fee);
         assertEq(address(c).balance, 0);
-        (, , , , , Commitment.Status s) = c.goals(id);
+        (, , , , , , Commitment.Status s) = c.goals(id);
         assertEq(uint8(s), uint8(Commitment.Status.Failed));
     }
 

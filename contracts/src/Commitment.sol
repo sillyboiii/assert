@@ -7,11 +7,14 @@ contract Commitment {
     struct Goal {
         address creator;
         address referee;
+        string goalText;
         uint256 amount;
         uint256 feeAmount;
         uint256 deadline;
         Status status;
     }
+
+    uint256 public constant MAX_GOAL_LENGTH = 280;
 
     uint256 public constant MIN_LOCK_HOURS = 1 hours;
     uint256 public constant MAX_LOCK_DAYS = 365 days;
@@ -28,6 +31,7 @@ contract Commitment {
         uint256 indexed id,
         address indexed creator,
         address indexed referee,
+        string goalText,
         uint256 amount,
         uint256 deadline
     );
@@ -40,14 +44,13 @@ contract Commitment {
     error NotCreator();
     error NotReferee();
     error SelfReferee();
-    error InvalidReferee();
+    error GoalTooLong();
     error DeadlineOutOfRange();
     error InvalidStake();
     error AlreadyStarted();
     error NotStarted();
     error DeadlineExpired();
     error DeadlineNotReached();
-    error AlreadyResolved();
     error TransferFailed();
 
     modifier onlyOwner() {
@@ -76,9 +79,14 @@ contract Commitment {
         treasury = treasury_;
     }
 
-    function createGoal(address referee, uint256 deadline) external payable returns (uint256 id) {
+    function createGoal(
+        string calldata goalText,
+        address referee,
+        uint256 deadline
+    ) external payable returns (uint256 id) {
         if (msg.value == 0 || msg.value < minStake || msg.value > maxStake) revert InvalidStake();
         if (referee == address(0) || referee == msg.sender) revert SelfReferee();
+        if (bytes(goalText).length == 0 || bytes(goalText).length > MAX_GOAL_LENGTH) revert GoalTooLong();
         if (deadline < block.timestamp + MIN_LOCK_HOURS || deadline > block.timestamp + MAX_LOCK_DAYS) {
             revert DeadlineOutOfRange();
         }
@@ -87,13 +95,14 @@ contract Commitment {
         goals[id] = Goal({
             creator: msg.sender,
             referee: referee,
+            goalText: goalText,
             amount: msg.value,
             feeAmount: (msg.value * feeBps) / 10_000,
             deadline: deadline,
             status: Status.Pending
         });
 
-        emit Created(id, msg.sender, referee, msg.value, deadline);
+        emit Created(id, msg.sender, referee, goalText, msg.value, deadline);
     }
 
     function acceptRole(uint256 id) external {
