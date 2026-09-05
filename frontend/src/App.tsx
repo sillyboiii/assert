@@ -1256,7 +1256,7 @@ export default function App() {
   const invoked = invited ? (allGoals ?? []).find((g) => g.id.toString() === invited) : undefined;
 
   return (
-    <div className="page">
+    <div className={`page${!isConnected ? ' landing-page' : ''}`}>
       <div className="aurora" aria-hidden="true" />
       <header>{!isConnected ? <LandingNav /> : null}</header>
 

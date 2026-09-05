@@ -69,6 +69,19 @@ header {
   box-shadow: none;
 }
 
+.landing-hero .fade-up,
+.landing-main .fade-up,
+.landing-hero .fade-up-1,
+.landing-hero .fade-up-2,
+.landing-hero .fade-up-3,
+.landing-hero .fade-up-4,
+.landing-main .fade-up-1,
+.landing-main .fade-up-2,
+.landing-main .fade-up-3,
+.landing-main .fade-up-4 {
+  animation: none;
+}
+
 header:empty {
   display: none;
 }
@@ -204,6 +217,11 @@ header:empty {
     radial-gradient(circle at 60% 36%, rgba(64, 92, 255, 0.18), transparent 54%),
     radial-gradient(circle at 30% 58%, rgba(238, 241, 255, 0.82), transparent 62%);
   z-index: -1;
+}
+
+.landing-page .aurora::before,
+.landing-page .aurora::after {
+  animation: none;
 }
 
 .hero-activity {
