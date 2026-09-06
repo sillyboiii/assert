@@ -33,10 +33,38 @@ type CreatedArgs = {
   deadline: bigint;
 };
 
+type UserProfile = {
+  username: string;
+  pfpUrl: string;
+  locked: boolean;
+};
+
 const short = (a: `0x${string}` | undefined, n = 4) =>
   a ? `${a.slice(0, n + 2)}…${a.slice(-n)}` : '';
 const fmt = (w: bigint) => (w === 0n ? '0' : Number(formatEther(w)).toFixed(3).replace(/\.?0+$/, ''));
 const FEE_BPS = 200n; // 2% protocol fee, mirrors the live contract
+const PROFILE_STORAGE_KEY = 'assert-profiles-v1';
+
+function defaultProfile(address?: `0x${string}`): UserProfile {
+  return { username: address ? short(address, 3) : 'you', pfpUrl: '', locked: false };
+}
+
+function readProfiles() {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) ?? '{}') as Record<string, UserProfile>;
+  } catch {
+    return {};
+  }
+}
+
+function ProfileAvatar({ profile, fallback = 'Y' }: { profile: UserProfile; fallback?: string }) {
+  const initial = (profile.username || fallback).trim().slice(0, 1).toUpperCase() || fallback;
+  return profile.pfpUrl.trim() ? (
+    <img className="profile-avatar" src={profile.pfpUrl.trim()} alt={`${profile.username || 'your'} pfp`} />
+  ) : (
+    <div className="profile-avatar">{initial}</div>
+  );
+}
 
 function useCountdown(deadline: bigint | undefined) {
   const [now, setNow] = useState(() => Date.now());
@@ -646,10 +674,13 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
   );
 }
 
-function ConnectedIntro({ onStart }: { onStart: () => void }) {
+function ConnectedIntro({ onStart, profile }: { onStart: () => void; profile: UserProfile }) {
   return (
     <section className="intro-scene">
-      <span className="intro-line intro-line-1">wallet connected.</span>
+      <div className="intro-profile intro-line intro-line-1">
+        <ProfileAvatar profile={profile} />
+        <span>{profile.locked ? profile.username : 'wallet connected.'}</span>
+      </div>
       <h2 className="intro-line intro-line-2">you ready to become a more disciplined version of yourself?</h2>
       <p className="intro-line intro-line-3">
         this is where excuses get expensive. choose what you’re done tolerating.
@@ -801,19 +832,46 @@ function FriendsTab({ onStart }: { onStart: () => void }) {
   );
 }
 
-function ProfileTab({ myGoals }: { myGoals: CreatedArgs[] }) {
+function ProfileTab({
+  myGoals,
+  profile,
+  address,
+  onSave,
+}: {
+  myGoals: CreatedArgs[];
+  profile: UserProfile;
+  address?: `0x${string}`;
+  onSave: (profile: UserProfile) => void;
+}) {
   const total = myGoals.length;
   const ethAtRisk = myGoals.reduce((sum, g) => sum + Number(formatEther(g.amount)), 0);
+  const [username, setUsername] = useState(profile.username);
+  const [pfpUrl, setPfpUrl] = useState(profile.pfpUrl);
+  const profileChanged = username.trim() !== profile.username || pfpUrl.trim() !== profile.pfpUrl;
+  const saveProfile = () => onSave({ username: username.trim() || short(address, 3) || 'you', pfpUrl: pfpUrl.trim(), locked: true });
   return (
     <div className="social-app fade-up">
       <section className="profile-card">
         <div className="profile-top">
-          <div className="profile-avatar">Y</div>
+          <ProfileAvatar profile={{ ...profile, username, pfpUrl }} />
           <div>
-            <span className="eyebrow">you</span>
-            <h2>sillyboi.base</h2>
-            <p>{short(myGoals[0]?.creator ?? '0xA8EaF49c1c33F987eFE883FdE72d4a1c243fB9EC')}</p>
+            <span className="eyebrow">{profile.locked ? 'locked profile' : 'set your profile'}</span>
+            <h2>{profile.locked ? profile.username : 'claim your name'}</h2>
+            <p>{short(address ?? myGoals[0]?.creator ?? '0xA8EaF49c1c33F987eFE883FdE72d4a1c243fB9EC')}</p>
           </div>
+        </div>
+        <div className="profile-editor">
+          <label>
+            username
+            <input value={username} maxLength={24} placeholder="sillyboi" onChange={(e) => setUsername(e.target.value)} />
+          </label>
+          <label>
+            pfp url
+            <input value={pfpUrl} placeholder="https://..." onChange={(e) => setPfpUrl(e.target.value)} />
+          </label>
+          <button className="btn-primary" type="button" onClick={saveProfile} disabled={!profileChanged && profile.locked}>
+            {profile.locked ? 'update profile' : 'lock it in'}
+          </button>
         </div>
         <div className="profile-stats">
           <div><span>won</span><b>{Math.max(0, total - 1)}</b></div>
@@ -1289,8 +1347,16 @@ function LandingSubstance() {
 export default function App() {
   const { isConnected, chainId, address } = useAccount();
   const [appMode, setAppMode] = useState<AppMode>('intro');
+  const [profiles, setProfiles] = useState<Record<string, UserProfile>>(readProfiles);
   const onKnownChain = chainId === 8453 || chainId === 84532;
   const { data: allGoals, isLoading: loadingGoals } = useAllCreated();
+  const profile = address ? profiles[address] ?? defaultProfile(address) : defaultProfile();
+  const saveProfile = (nextProfile: UserProfile) => {
+    if (!address) return;
+    const nextProfiles = { ...profiles, [address]: nextProfile };
+    setProfiles(nextProfiles);
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextProfiles));
+  };
 
   // deep link: #g/<id>
   const [inviteId, setInviteId] = useState<string | null>(null);
@@ -1338,7 +1404,7 @@ export default function App() {
           ) : null}
 
           {invited ? null : appMode === 'intro' ? (
-            <ConnectedIntro onStart={() => setAppMode('home')} />
+            <ConnectedIntro onStart={() => setAppMode('home')} profile={profile} />
           ) : appMode === 'builder' ? (
             <div className="create-screen fade-up">
               {!onKnownChain && (
@@ -1351,7 +1417,7 @@ export default function App() {
           ) : appMode === 'friends' ? (
             <FriendsTab onStart={() => setAppMode('builder')} />
           ) : appMode === 'you' ? (
-            <ProfileTab myGoals={myGoals} />
+            <ProfileTab key={address} myGoals={myGoals} profile={profile} address={address} onSave={saveProfile} />
           ) : (
             <DisciplineHome
               allGoals={allGoals}
