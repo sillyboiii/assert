@@ -923,7 +923,7 @@ function AssertCard({ goal, status = 'Live' }: { goal: CreatedArgs; status?: Ass
 }
 
 function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
-  const [filter, setFilter] = useState<AssertFilter>('Live');
+  const [filter, setFilter] = useState<AssertFilter>('Pending');
   return (
     <div className="social-app fade-up">
       <section className="tab-shell">
