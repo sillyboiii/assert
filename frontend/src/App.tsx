@@ -1778,9 +1778,17 @@ export default function App() {
 
   // deep link: #g/<id>
   const [inviteId, setInviteId] = useState<string | null>(null);
-  const invited = useMemo(() => {
+  const [invited, setInvited] = useState<string | null>(() => {
     const m = window.location.hash.match(/^#g\/(\d+)$/);
     return m ? m[1] : null;
+  });
+  useEffect(() => {
+    const onHash = () => {
+      const m = window.location.hash.match(/^#g\/(\d+)$/);
+      setInvited(m ? m[1] : null);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
   const myGoals = (allGoals ?? []).filter(
@@ -1833,6 +1841,10 @@ export default function App() {
   };
   const selectMode = (mode: AppMode) => {
     if (mode === 'builder') setDraftReferee(undefined);
+    if (invited || window.location.hash.startsWith('#g/')) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      setInvited(null);
+    }
     setAppMode(mode);
   };
 
@@ -1901,7 +1913,7 @@ export default function App() {
               onClose={() => setInviteId(null)}
             />
           ) : null}
-          {appMode !== 'intro' && !invited ? <BottomNav active={appMode} onSelect={selectMode} pending={refereeRequests.length} /> : null}
+          {appMode !== 'intro' ? <BottomNav active={appMode} onSelect={selectMode} pending={refereeRequests.length} /> : null}
         </main>
       )}
 
