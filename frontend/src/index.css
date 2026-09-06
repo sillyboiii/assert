@@ -1962,18 +1962,20 @@ img.profile-avatar {
 
 .nav-badge {
   position: absolute;
-  top: 2px;
-  right: 14px;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 5px;
-  border-radius: 10px;
+  top: -4px;
+  right: 6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border: 2px solid var(--white);
+  border-radius: 999px;
   background: var(--red);
   color: #fff;
   font-size: 10px;
   font-weight: 900;
-  line-height: 17px;
+  line-height: 16px;
   text-align: center;
+  box-shadow: 0 6px 14px rgba(238, 74, 106, 0.28);
 }
 
 .bottom-nav .nav-plus {
@@ -3771,6 +3773,17 @@ footer a {
   font-weight: 800;
 }
 
+.assert-card .time-left {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #f1f4ff;
+  color: var(--blue-deep);
+  font-size: 11px;
+  line-height: 1.1;
+}
+
 .assert-card .assert-human-row > span:first-child {
   display: inline-flex;
   align-items: center;
@@ -3788,6 +3801,53 @@ footer a {
 
 .assert-card .time-left.urgent {
   color: var(--amber);
+}
+
+@media (max-width: 420px) {
+  .bottom-nav {
+    width: calc(100vw - 16px);
+    grid-template-columns: 1fr 1fr 56px 1fr 1fr;
+    gap: 2px;
+    padding: 7px;
+  }
+
+  .bottom-nav button {
+    height: 42px;
+    border-radius: 16px;
+    font-size: 11px;
+  }
+
+  .bottom-nav .nav-plus {
+    height: 50px;
+    border-radius: 20px;
+  }
+
+  .nav-badge {
+    top: -5px;
+    right: 1px;
+  }
+
+  .assert-card {
+    padding: 16px;
+    border-radius: 22px;
+  }
+
+  .assert-card .assert-human-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .assert-card .assert-human-row > span:first-child {
+    flex: 1 1 100%;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .assert-card .time-left {
+    margin-left: 32px;
+  }
 }
 
 .assert-details {

@@ -1763,7 +1763,12 @@ function LandingSubstance() {
 
 export default function App() {
   const { isConnected, chainId, address } = useAccount();
-  const [appMode, setAppMode] = useState<AppMode>('intro');
+  const [appMode, setAppMode] = useState<AppMode>(() => {
+    const saved = localStorage.getItem('assert-app-mode');
+    return saved === 'home' || saved === 'asserts' || saved === 'builder' || saved === 'friends' || saved === 'you'
+      ? saved
+      : 'intro';
+  });
   const [profiles, setProfiles] = useState<Record<string, UserProfile>>(readProfiles);
   const [draftReferee, setDraftReferee] = useState<string | undefined>();
   const onKnownChain = chainId === 8453 || chainId === 84532;
@@ -1775,6 +1780,11 @@ export default function App() {
     setProfiles(nextProfiles);
     localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextProfiles));
   };
+
+  useEffect(() => {
+    if (appMode === 'intro') return;
+    localStorage.setItem('assert-app-mode', appMode);
+  }, [appMode]);
 
   // deep link: #g/<id>
   const [inviteId, setInviteId] = useState<string | null>(null);
