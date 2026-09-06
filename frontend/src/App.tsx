@@ -1410,25 +1410,210 @@ function LandingFinalCta() {
       <div className="landing-footer">
         <span>Assert</span>
         <span>built on Base</span>
+        <span className="footer-legal">
+          <a href="#/terms">terms</a>
+          <span>·</span>
+          <a href="#/privacy">privacy</a>
+        </span>
       </div>
     </section>
+  );
+}
+
+type LegalSection = { heading: string; paras: string[] };
+
+const LEGAL: Record<'terms' | 'privacy', { eyebrow: string; title: string; updated: string; sections: LegalSection[] }> = {
+  terms: {
+    eyebrow: 'terms & conditions',
+    title: 'the terms.',
+    updated: 'last updated: september 2026',
+    sections: [
+      {
+        heading: '1. you\'re making a promise',
+        paras: [
+          'Assert lets you stake money on commitments you make to yourself while a friend you pick acts as referee. By creating or refereeing a commitment you agree to these terms and to use Assert only for lawful purposes.',
+          'This is a game of accountability, not a store of value, an investment product, or financial advice. We make no promise that you will keep your commitments — that is the whole point.',
+        ],
+      },
+      {
+        heading: '2. who can use it',
+        paras: [
+          'You must be at least 18 years old and legally able to enter into binding agreements. You may not use Assert in any jurisdiction where doing so is prohibited.',
+        ],
+      },
+      {
+        heading: '3. your stake is real',
+        paras: [
+          'When you assert a goal, your stake is locked onchain and is not refundable. If you hit your commitment your stake and your referee\'s stake are returned. If you miss, the pot is paid out as the rules you agreed to when you created the commitment.',
+          'Transactions on Base cannot be reversed. Double-check every goal, amount, deadline and referee before you sign — there are no takebacks, by design.',
+        ],
+      },
+      {
+        heading: '4. referees judge',
+        paras: [
+          'A referee is a person you choose, and their call on whether a commitment was met is final. We are not your referee and we cannot override, review or reverse a referee\'s decision. Pick someone you trust to be honest.',
+        ],
+      },
+      {
+        heading: '5. no guarantees, experimental software',
+        paras: [
+          'The Assert contracts are experimental and provided "as is" without warranty of any kind, express or implied. Smart contracts, chains and apps can contain bugs, be exploited, or be interrupted.',
+          'You use Assert entirely at your own risk. To the maximum extent permitted by law, we accept no liability for any loss — including lost stakes, lost funds, or indirect or consequential loss — arising from your use of the app.',
+        ],
+      },
+      {
+        heading: '6. things you can\'t do',
+        paras: [
+          'No illegal, abusive, fraudulent or harmful use. No cheating, colluding with your referee to rig outcomes, or harassing other users. We may refuse service or restrict access to anyone breaching these terms.',
+        ],
+      },
+      {
+        heading: '7. changes & governance',
+        paras: [
+          'We may update these terms at any time. Continued use of Assert after changes means you accept them. The deployed contracts are governed by their immutable code — what the code does, the code does.',
+        ],
+      },
+      {
+        heading: '8. talk to us',
+        paras: [
+          'Questions about these terms? Reach us through the site at assert-three.vercel.app.',
+        ],
+      },
+    ],
+  },
+  privacy: {
+    eyebrow: 'privacy policy',
+    title: 'the privacy policy.',
+    updated: 'last updated: september 2026',
+    sections: [
+      {
+        heading: '1. short version',
+        paras: [
+          'We barely collect anything. Assert is a smart-contract app: your wallet connects directly to the Base network and almost everything lives on the public blockchain, not on our servers.',
+        ],
+      },
+      {
+        heading: '2. what we do collect',
+        paras: [
+          'Your wallet address (so the app can show you your commitments and profile), a username and optional profile picture that you choose and that we store only in your browser\'s local storage, and onchain data — goals, stakes and referee decisions — which is public by the nature of blockchain.',
+        ],
+      },
+      {
+        heading: '3. what we don\'t collect',
+        paras: [
+          'No email, no phone number, no name, no ID, no KYC, no location tracking, and no cookies that follow you around. We do not sell data. We do not advertise.',
+        ],
+      },
+      {
+        heading: '4. when you send a transaction',
+        paras: [
+          'Your wallet sends transactions to the Base network, which may involve third-party RPC providers and wallet providers (such as Coinbase Wallet or WalletConnect). Those services have their own privacy policies and handle your data as needed to route your transactions.',
+        ],
+      },
+      {
+        heading: '5. blockchain is public',
+        paras: [
+          'Everything you do onchain is permanently and publicly visible to anyone: your wallet address, your goals, your stakes and the outcome of each commitment. Do not assert anything you wouldn\'t be comfortable having public.',
+        ],
+      },
+      {
+        heading: '6. your local data is yours',
+        paras: [
+          'Your profile stays in your browser\'s local storage on this device. Clearing your browser data removes it; it is never copied to our servers.',
+        ],
+      },
+      {
+        heading: '7. kids',
+        paras: [
+          'Assert is not for anyone under 18, and we ask that minors not use it. Do not assert a goal if it may put personal data about someone else onchain without their consent.',
+        ],
+      },
+      {
+        heading: '8. changes & contact',
+        paras: [
+          'We may update this policy from time to time; the date above reflects the latest version. Questions? Reach us through the site at assert-three.vercel.app.',
+        ],
+      },
+    ],
+  },
+};
+
+function LegalPage({ route }: { route: keyof typeof LEGAL }) {
+  const content = LEGAL[route];
+  return (
+    <div className="page page-legal">
+      <div className="aurora" aria-hidden="true" />
+      <header className="legal-top">
+        <img className="brand-wordmark legal-wordmark" src="/wordmark.png" alt="Assert" />
+        <a className="legal-back" href="#/">← back</a>
+      </header>
+      <main className="legal-content">
+        <p className="legal-eyebrow">{content.eyebrow}</p>
+        <h1>{content.title}</h1>
+        <p className="legal-updated">{content.updated}</p>
+        {content.sections.map((s) => (
+          <section key={s.heading}>
+            <h2>{s.heading}</h2>
+            {s.paras.map((p) => (
+              <p key={p}>{p}</p>
+            ))}
+          </section>
+        ))}
+      </main>
+      <footer className="legal-bottom">Assert · built on Base · <a href="#/">back home</a></footer>
+    </div>
   );
 }
 
 function LandingSubstance() {
   return (
     <section className="landing-substance" aria-label="how Assert works">
-      <div>
-        <span>promise</span>
-        <p>say the thing you keep putting off.</p>
+      <div className="landing-step step-blue">
+        <div className="step-top">
+          <span className="step-id">
+            <span className="step-num">01</span>
+            <span className="step-label">promise</span>
+          </span>
+          <span className="step-icon-chip">
+            <svg className="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <circle cx="12" cy="12" r="8.5" />
+              <circle cx="12" cy="12" r="4.5" />
+              <circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none" />
+            </svg>
+          </span>
+        </div>
+        <p>say the thing you keep putting off. out loud.</p>
       </div>
-      <div>
-        <span>stake</span>
-        <p>put real money behind your word.</p>
+      <div className="landing-step step-green">
+        <div className="step-top">
+          <span className="step-id">
+            <span className="step-num">02</span>
+            <span className="step-label">stake</span>
+          </span>
+          <span className="step-icon-chip">
+            <svg className="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+              <ellipse cx="12" cy="7.6" rx="7" ry="4" />
+              <path d="M5 7.6v4.8c0 2.2 3.1 4 7 4s7-1.8 7-4V7.6" />
+              <path d="M5 12.4v4.8c0 2.2 3.1 4 7 4s7-1.8 7-4v-4.8" />
+            </svg>
+          </span>
+        </div>
+        <p>put real money behind your word. no takebacks.</p>
       </div>
-      <div>
-        <span>referee</span>
-        <p>your friend calls it when time is up.</p>
+      <div className="landing-step step-lavender">
+        <div className="step-top">
+          <span className="step-id">
+            <span className="step-num">03</span>
+            <span className="step-label">referee</span>
+          </span>
+          <span className="step-icon-chip">
+            <svg className="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l8 3v5c0 4.6-3.2 8.7-8 10-4.8-1.3-8-5.4-8-10V6z" />
+              <path d="M9 12l2 2 4-4.5" />
+            </svg>
+          </span>
+        </div>
+        <p>your friend calls it when time is up. fair.</p>
       </div>
     </section>
   );
@@ -1462,6 +1647,21 @@ export default function App() {
     (g) => address && (g.creator === address || g.referee === address),
   );
   const invoked = invited ? (allGoals ?? []).find((g) => g.id.toString() === invited) : undefined;
+
+  const [legalRoute, setLegalRoute] = useState<'terms' | 'privacy' | null>(() => {
+    const m = window.location.hash.match(/^#\/(terms|privacy)$/);
+    return m ? (m[1] as 'terms' | 'privacy') : null;
+  });
+  useEffect(() => {
+    const onHash = () => {
+      const m = window.location.hash.match(/^#\/(terms|privacy)$/);
+      setLegalRoute(m ? (m[1] as 'terms' | 'privacy') : null);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  if (legalRoute) return <LegalPage route={legalRoute} />;
   const startBuilder = (friend?: Friend) => {
     setDraftReferee(friend?.address);
     setAppMode('builder');
@@ -1538,7 +1738,13 @@ export default function App() {
         </main>
       )}
 
-      {isConnected ? <footer className="muted">assert — on your honor, onchain.</footer> : null}
+      {isConnected ? (
+        <footer className="muted">
+          assert — on your honor, onchain. ·{' '}
+          <a className="legal-inline" href="#/terms">terms</a> ·{' '}
+          <a className="legal-inline" href="#/privacy">privacy</a>
+        </footer>
+      ) : null}
     </div>
   );
 }
