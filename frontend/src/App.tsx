@@ -590,7 +590,7 @@ function Step4Review({
   );
 }
 
-function CreateWizard({ onCreated, initialReferee }: { onCreated: (id: bigint) => void; initialReferee?: string }) {
+function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id: bigint) => void; initialReferee?: string; contacts: Friend[] }) {
   const [step, setStep] = useState(0);
   const [goal, setGoal] = useState('');
   const [proof, setProof] = useState('');
@@ -745,7 +745,7 @@ function CreateWizard({ onCreated, initialReferee }: { onCreated: (id: bigint) =
           setIntensity={setIntensity}
         />
       )}
-      {step === 2 && <Step2Referee value={referee} onChange={setReferee} onResolved={setResolvedReferee} friends={FRIENDS} />}
+      {step === 2 && <Step2Referee value={referee} onChange={setReferee} onResolved={setResolvedReferee} friends={contacts} />}
       {step === 3 && <Step4Proof proof={proof} setProof={setProof} />}
       {step === 4 && <Step4Review goal={goal} proof={proof} referee={refereeResult.addr ?? referee} stake={stake} days={days} />}
 
@@ -816,12 +816,27 @@ type SocialFeedItem = {
   pfp?: string;
 };
 
-const SOCIAL_ACTIVITY: SocialFeedItem[] = [
-  { who: 'Josh', action: 'completed', body: 'Gym 4x this week', meta: 'Mia approved it · 20m ago', badge: 'won', reaction: '12', result: '+0.5 ETH kept' },
-  { who: 'Mia', action: 'put', body: '0.03 ETH on reading every day', meta: 'deadline in 7 days', badge: 'live', reaction: '8' },
-  { who: 'Ade', action: 'checked in', body: 'no nicotine, day 5', meta: 'Sam is watching', badge: 'day', reaction: '15' },
-  { who: 'Liv', action: 'bailed on', body: 'her 6am run', meta: 'referee got paid', badge: 'folded', reaction: '6', result: '0.25 ETH → referee' },
-];
+function activityFromGoals(
+  myGoals: CreatedArgs[],
+  statuses: (GoalStruct | undefined)[],
+): SocialFeedItem[] {
+  return myGoals.map((g, i) => {
+    const st = statuses[i]?.[6];
+    const badge: SocialFeedItem['badge'] =
+      st === 2 ? 'won' : st === 3 ? 'folded' : st === 1 ? 'live' : 'day';
+    const action = st === 2 ? 'won the assert' : st === 3 ? 'bailed on' : st === 4 ? 'cancelled' : st === 0 ? 'asserted' : 'is pushing';
+    const meta = st === 0 ? 'waiting on referee' : `status: ${STATUS_LABEL[st ?? 0].toLowerCase()}`;
+    const result =
+      st === 2
+        ? `+${fmt(g.amount)} ETH kept`
+        : st === 3
+          ? `${fmt(g.amount)} ETH → referee`
+          : st === 4
+            ? 'refunded to you'
+            : undefined;
+    return { who: 'you', action, body: g.goalText, meta, badge, reaction: '0', result };
+  });
+}
 
 const PILL_LABEL: Record<SocialFeedItem['badge'], string> = { won: 'WON', live: 'LIVE', day: 'DAY 5', folded: 'FOLDED' };
 
@@ -869,25 +884,14 @@ function SocialFeed({ rows, onOpen }: { rows: SocialFeedItem[]; onOpen?: () => v
   );
 }
 
-const FRIENDS: Friend[] = [
-  { name: 'Josh', role: 'referee', record: '8 won · 2 bailed', detail: 'gym, running, early mornings', pfp: '', address: '0xA8EaF49c1c33F987eFE883FdE72d4a1c243fB9EC' },
-  { name: 'Mia', role: 'watching you', record: '12 won · 1 bailed', detail: 'reading, no sugar, focus blocks', pfp: '', address: '0x8Ba1f109551bD432803012645Ac136ddd64DBA72' },
-  { name: 'Ade', role: 'live assert', record: '5 day streak', detail: 'no nicotine', pfp: '', address: '0x48665B930a1c3DcE69C9D2d1d58E97f13F5F0c1' },
-  { name: 'Liv', role: 'referee', record: '4 won · 3 bailed', detail: 'wellness and sleep', pfp: '', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
-];
-
 type AppMode = 'intro' | 'home' | 'asserts' | 'builder' | 'friends' | 'you';
 type AssertFilter = 'Live' | 'Pending' | 'Won' | 'Bailed';
 
 const FILTERS: AssertFilter[] = ['Live', 'Pending', 'Won', 'Bailed'];
 
-function sampleStatus(id: bigint): AssertFilter {
-  return (['Live', 'Pending', 'Won', 'Bailed'] as const)[Number(id % 4n)];
-}
-
-function AssertCard({ goal, status = 'Live', isExample = false }: { goal: CreatedArgs; status?: AssertFilter; isExample?: boolean }) {
+function AssertCard({ goal, status = 'Live' }: { goal: CreatedArgs; status?: AssertFilter }) {
   const cd = useCountdown(goal.deadline);
-  const refereeName = isExample ? 'Josh' : short(goal.referee, 4);
+  const refereeName = short(goal.referee, 4);
   const [open, setOpen] = useState(false);
   return (
     <button
@@ -908,7 +912,6 @@ function AssertCard({ goal, status = 'Live', isExample = false }: { goal: Create
         <div className="assert-details">
           <div className="assert-risk-strip">
             <span>Bail → {refereeName} gets {fmt(goal.amount)} ETH</span>
-            {isExample ? <small>demo</small> : null}
           </div>
         </div>
       ) : null}
@@ -919,7 +922,6 @@ function AssertCard({ goal, status = 'Live', isExample = false }: { goal: Create
 
 function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
   const [filter, setFilter] = useState<AssertFilter>('Live');
-  const examples = SAMPLE_ASSERTS.filter((g) => sampleStatus(g.id) === filter).slice(0, 3);
   return (
     <div className="social-app fade-up">
       <section className="tab-shell">
@@ -935,8 +937,6 @@ function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
         <div className="assert-card-list">
           {myGoals.length ? (
             myGoals.map((g) => <GoalCard key={g.id.toString()} id={g.id.toString()} only={filter} />)
-          ) : examples.length ? (
-            examples.map((g) => <AssertCard key={g.id.toString()} goal={g} status={filter} isExample />)
           ) : (
             <p className="empty-copy">nothing {filter.toLowerCase()} yet.</p>
           )}
@@ -946,49 +946,113 @@ function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
   );
 }
 
-function FriendsTab({ onStart }: { onStart: (friend?: Friend) => void }) {
-  const [friends, setFriends] = useState(FRIENDS);
-  const [selected, setSelected] = useState<string | null>(null);
+function FriendsTab({
+  requests,
+  contacts,
+  profiles,
+  address,
+  onStart,
+  feed,
+}: {
+  requests: CreatedArgs[];
+  contacts: `0x${string}`[];
+  profiles: Record<string, UserProfile>;
+  address?: `0x${string}`;
+  onStart: (friend?: Friend) => void;
+  feed: SocialFeedItem[];
+}) {
+  const { writeContractAsync, isPending } = useWriteContract();
+  const dismissKey = address ? `assert-dismiss-referee:${address.toLowerCase()}` : '';
+  const [dismissed, setDismissed] = useState<string[]>(() => {
+    if (!address) return [];
+    try { return JSON.parse(localStorage.getItem(dismissKey) ?? '[]'); } catch { return []; }
+  });
+  const visibleRequests = requests.filter((r) => !dismissed.includes(r.id.toString()));
+  const [filter, setFilter] = useState('');
+  const filteredContacts = contacts.filter((a) => !filter || short(a, 4).toLowerCase().includes(filter.toLowerCase()));
+  const accept = async (id: bigint) => {
+    const h = await writeContractAsync({ address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id] });
+    await waitForTx(h);
+    window.location.reload();
+  };
+  const dismiss = (id: bigint) => {
+    const next = [...dismissed, id.toString()];
+    setDismissed(next);
+    if (address) localStorage.setItem(dismissKey, JSON.stringify(next));
+  };
   return (
     <div className="social-app fade-up">
       <section className="tab-shell">
-        <div className="tab-head inline">
-          <div>
-            <span className="eyebrow">friends</span>
-            <h2>your referees</h2>
-          </div>
-          <button className="small-blue">invite</button>
+        <div className="tab-head">
+          <span className="eyebrow">friends</span>
+          <h2>your circle</h2>
         </div>
-        <input className="friend-search" placeholder="search or invite a friend" />
+        {visibleRequests.length ? (
+          <div className="friend-requests">
+            {visibleRequests.map((g) => (
+              <div className="friend-card-wrap request-card" key={g.id.toString()}>
+                <div className="friend-card">
+                  <MiniAvatar name={short(g.creator, 4)} />
+                  <div>
+                    <h3>{short(g.creator, 4)} called you in</h3>
+                    <p>{g.goalText}</p>
+                    <b>{fmt(g.amount)} ETH</b>
+                  </div>
+                </div>
+                <div className="friend-bubble request-actions" role="group">
+                  <button type="button" className="btn green" onClick={() => accept(g.id)} disabled={isPending}>
+                    {isPending ? 'accepting…' : 'accept role'}
+                  </button>
+                  <a href={`#g/${g.id.toString()}`} className="btn ghost view-assert">view assert →</a>
+                  <button type="button" className="btn ghost" onClick={() => dismiss(g.id)} disabled={isPending}>
+                    dismiss
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-copy" style={{ marginTop: 0 }}>no pending referee requests.</p>
+        )}
+        <input className="friend-search" placeholder="search contacts" value={filter} onChange={(e) => setFilter(e.target.value)} />
         <div className="friend-list">
-          {friends.map((f) => (
-            <div className="friend-card-wrap" key={f.name}>
-              <button className="friend-card" onClick={() => setSelected(selected === f.name ? null : f.name)}>
-                <MiniAvatar name={f.name} src={f.pfp} />
-                <div>
-                  <h3>{f.name}</h3>
-                  <p>{f.detail}</p>
+          {filteredContacts.length ? (
+            filteredContacts.map((a) => {
+              const f: Friend = {
+                name: profiles[a]?.username ?? short(a, 4),
+                role: 'peer',
+                record: '',
+                detail: short(a, 6),
+                pfp: profiles[a]?.pfpUrl ?? '',
+                address: a,
+              };
+              return (
+                <div className="friend-card-wrap" key={a}>
+                  <button className="friend-card" onClick={() => onStart(f)}>
+                    <MiniAvatar name={f.name} src={f.pfp} />
+                    <div>
+                      <h3>{f.name}</h3>
+                      <p>{f.detail}</p>
+                    </div>
+                    <div className="friend-meta"><b>{f.role}</b></div>
+                  </button>
                 </div>
-                <div className="friend-meta">
-                  <b>{f.role}</b>
-                  <span>{f.record}</span>
-                </div>
-              </button>
-              {selected === f.name ? (
-                <div className="friend-bubble" role="menu">
-                  <button type="button" onClick={() => onStart(f)}>send assert request</button>
-                  <button type="button" className="danger" onClick={() => setFriends((list) => list.filter((friend) => friend.name !== f.name))}>unfriend</button>
-                </div>
-              ) : null}
-            </div>
-          ))}
+              );
+            })
+          ) : (
+            <p className="empty-copy" style={{ marginTop: 0 }}>no contacts yet — create an assert with a friend to get started.</p>
+          )}
         </div>
       </section>
       <section className="social-feed-section">
         <div className="section-head clean">
-          <h2 className="section-title">their activity</h2>
+          <h2 className="section-title">recent activity</h2>
         </div>
-        <SocialFeed rows={SOCIAL_ACTIVITY.slice(0, 3)} onOpen={() => onStart()} />
+        {feed.length ? (
+          <SocialFeed rows={feed.slice(0, 4)} />
+        ) : (
+          <p className="empty-copy">no activity yet.</p>
+        )}
       </section>
     </div>
   );
@@ -1018,6 +1082,11 @@ function ProfileTab({
     (sum, g) => sum + (g && g[6] === 3 ? Number(formatEther(g[3] - g[4])) : 0),
     0,
   );
+  const history = myGoals
+    .map((g, i) => ({ goal: g, st: goals[i]?.[6] }))
+    .filter((h) => h.st === 2 || h.st === 3 || h.st === 4)
+    .reverse()
+    .slice(0, 4);
   const [username, setUsername] = useState(profile.username);
   const [pfpUrl, setPfpUrl] = useState(profile.pfpUrl);
   const profileChanged = username.trim() !== profile.username || pfpUrl.trim() !== profile.pfpUrl;
@@ -1064,9 +1133,16 @@ function ProfileTab({
         <div className="section-head clean">
           <h2 className="section-title">recent history</h2>
         </div>
-        {SOCIAL_ACTIVITY.slice(0, 3).map((item) => (
-          <div className="history-row" key={item.body}><span>{item.badge}</span><p>{item.body}</p></div>
-        ))}
+        {history.length ? (
+          history.map(({ goal: g, st }) => (
+            <div className="history-row" key={g.id.toString()}>
+              <span>{st === 2 ? 'WON' : st === 3 ? 'FOLDED' : 'CANCELLED'}</span>
+              <p>{g.goalText}</p>
+            </div>
+          ))
+        ) : (
+          <p className="empty-copy">no finished asserts — no history yet.</p>
+        )}
         <WalletSettings />
       </section>
     </div>
@@ -1076,17 +1152,24 @@ function ProfileTab({
 function DisciplineHome({
   allGoals,
   myGoals,
+  statuses,
+  friendCount,
   loadingGoals,
   onStart,
 }: {
   allGoals?: CreatedArgs[];
   myGoals: CreatedArgs[];
+  statuses: (GoalStruct | undefined)[];
+  friendCount: number;
   loadingGoals: boolean;
   onStart: () => void;
 }) {
   const active = myGoals.filter((g) => Number(g.deadline) * 1000 > Date.now()).length;
   const ethAtRisk = myGoals.reduce((sum, g) => sum + Number(formatEther(g.amount)), 0);
-  const displayGoals = myGoals.length ? myGoals : SAMPLE_ASSERTS.slice(0, 2);
+  const livePairs = myGoals
+    .map((g, i) => ({ g, st: statuses[i]?.[6] }))
+    .filter(({ st }) => st === 0 || st === 1);
+  const feed = activityFromGoals(myGoals, statuses);
   return (
     <div className="social-app fade-up">
       <section className="home-hero-card">
@@ -1112,7 +1195,7 @@ function DisciplineHome({
         </div>
         <div>
           <span>friends watching</span>
-          <b>{myGoals.length ? myGoals.length : 'soon'}</b>
+          <b>{friendCount || '0'}</b>
         </div>
       </section>
 
@@ -1121,16 +1204,26 @@ function DisciplineHome({
           <h2 className="section-title">active asserts</h2>
           <span className="section-sub muted">what’s currently at risk</span>
         </div>
-        <div className="active-scroll">
-          {displayGoals.map((g) => <AssertCard key={g.id.toString()} goal={g} status="Live" isExample={!myGoals.length} />)}
-        </div>
+        {livePairs.length ? (
+          <div className="active-scroll">
+            {livePairs.map(({ g, st }) => (
+              <AssertCard key={g.id.toString()} goal={g} status={st === 0 ? 'Pending' : 'Live'} />
+            ))}
+          </div>
+        ) : (
+          <p className="empty-copy">nothing live yet. start one and send it to a friend.</p>
+        )}
       </section>
 
       <section className="social-feed-section">
         <div className="section-head clean">
-          <h2 className="section-title">friend activity</h2>
+          <h2 className="section-title">recent activity</h2>
         </div>
-        <SocialFeed rows={SOCIAL_ACTIVITY} onOpen={onStart} />
+        {feed.length ? (
+          <SocialFeed rows={feed.slice(0, 4)} onOpen={onStart} />
+        ) : (
+          <p className="empty-copy">no activity yet.</p>
+        )}
       </section>
 
       <section className="app-panel your-panel social-panel">
@@ -1174,7 +1267,7 @@ function WalletSettings() {
   );
 }
 
-function BottomNav({ active, onSelect }: { active: AppMode; onSelect: (mode: AppMode) => void }) {
+function BottomNav({ active, onSelect, pending }: { active: AppMode; onSelect: (mode: AppMode) => void; pending?: number }) {
   const items: { label: string; mode: AppMode }[] = [
     { label: 'Home', mode: 'home' },
     { label: 'Asserts', mode: 'asserts' },
@@ -1191,6 +1284,7 @@ function BottomNav({ active, onSelect }: { active: AppMode; onSelect: (mode: App
           onClick={() => onSelect(item.mode)}
         >
           {item.label}
+          {item.mode === 'friends' && pending ? <span className="nav-badge">{pending > 9 ? '9+' : pending}</span> : null}
         </button>
       ))}
     </nav>
@@ -1364,14 +1458,6 @@ function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
 
 /* ---------------- feed / leaderboard ---------------- */
 
-const SAMPLE_ASSERTS: CreatedArgs[] = [
-  { id: 1n, creator: '0x8Ba1f109551bD432803012645Ac136ddd64DBA72', referee: '0xA8EaF49c1c33F987eFE883FdE72d4a1c243fB9EC', goalText: 'no junk food for 30 days', amount: parseUnits('0.5', 18), deadline: BigInt(Math.floor(Date.now() / 1000) + 6 * 86400) },
-  { id: 2n, creator: '0x48665B930a1c3DcE69C9D2d1d58E97f13F5F0c1', referee: '0x8Ba1f109551bD432803012645Ac136ddd64DBA72', goalText: 'run a 5k every single morning', amount: parseUnits('0.25', 18), deadline: BigInt(Math.floor(Date.now() / 1000) + 2 * 86400) },
-  { id: 3n, creator: '0xA8EaF49c1c33F987eFE883FdE72d4a1c243fB9EC', referee: '0x48665B930a1c3DcE69C9D2d1d58E97f13F5F0c1', goalText: 'read 20 pages a day, no excuses', amount: parseUnits('1', 18), deadline: BigInt(Math.floor(Date.now() / 1000) + 13 * 86400) },
-  { id: 4n, creator: '0x8Ba1f109551bD432803012645Ac136ddd64DBA72', referee: '0xA8EaF49c1c33F987eFE883FdE72d4a1c243fB9EC', goalText: 'cold plunge every morning for a month', amount: parseUnits('0.75', 18), deadline: BigInt(Math.floor(Date.now() / 1000) + 3 * 86400) },
-  { id: 5n, creator: '0x48665B930a1c3DcE69C9D2d1d58E97f13F5F0c1', referee: '0x8Ba1f109551bD432803012645Ac136ddd64DBA72', goalText: 'no doomscrolling before noon', amount: parseUnits('0.1', 18), deadline: BigInt(Math.floor(Date.now() / 1000) + 18 * 86400) },
-].map((g, i) => ({ ...g, id: BigInt(9000 + i) })) as CreatedArgs[];
-
 function TopAssertRow({ goal, rank, seeded }: { goal: CreatedArgs; rank: number; seeded: boolean }) {
   const cd = useCountdown(goal.deadline);
   return (
@@ -1394,7 +1480,7 @@ function TopAssertRow({ goal, rank, seeded }: { goal: CreatedArgs; rank: number;
 }
 
 function TopAsserts({ goals, limit = 8, seeded = false }: { goals?: CreatedArgs[]; limit?: number; seeded?: boolean }) {
-  const src = goals && goals.length ? goals : SAMPLE_ASSERTS;
+  const src = goals ?? [];
   const sorted = useMemo(() => [...src].sort((a, b) => (a.amount < b.amount ? 1 : -1)), [src]);
   const rows = sorted.slice(0, limit);
   return (
@@ -1698,6 +1784,31 @@ export default function App() {
   const myGoals = (allGoals ?? []).filter(
     (g) => address && (g.creator === address || g.referee === address),
   );
+  const myStatuses = useGoalsByIds(myGoals.map((g) => g.id));
+  const refereeRequests = myGoals.filter(
+    (g, i) => g.referee === address && myStatuses[i]?.[6] === 0,
+  );
+  const feed = activityFromGoals(myGoals, myStatuses);
+  const contacts = useMemo(() => {
+    const set = new Set<`0x${string}`>();
+    for (const g of allGoals ?? []) {
+      if (address && g.creator === address && g.referee !== address) set.add(g.referee);
+      if (address && g.referee === address && g.creator !== address) set.add(g.creator);
+    }
+    return [...set];
+  }, [allGoals, address]);
+  const contactFriends: Friend[] = useMemo(
+    () =>
+      contacts.map((a) => ({
+        name: profiles[a]?.username ?? short(a, 4),
+        role: 'peer',
+        record: '',
+        detail: short(a, 6),
+        pfp: profiles[a]?.pfpUrl ?? '',
+        address: a,
+      })),
+    [contacts, profiles],
+  );
   const invoked = invited ? (allGoals ?? []).find((g) => g.id.toString() === invited) : undefined;
 
   const [legalRoute, setLegalRoute] = useState<'terms' | 'privacy' | null>(() => {
@@ -1763,18 +1874,20 @@ export default function App() {
               {!onKnownChain && (
                 <div className="banner action-warning">switch to <b>base</b> before locking an assert.</div>
               )}
-              <CreateWizard key={draftReferee ?? 'empty-referee'} initialReferee={draftReferee} onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
+              <CreateWizard key={draftReferee ?? 'empty-referee'} initialReferee={draftReferee} contacts={contactFriends} onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
             </div>
           ) : appMode === 'asserts' ? (
             <AssertsTab myGoals={myGoals} />
           ) : appMode === 'friends' ? (
-            <FriendsTab onStart={startBuilder} />
+            <FriendsTab requests={refereeRequests} contacts={contacts} profiles={profiles} address={address} onStart={startBuilder} feed={feed} />
           ) : appMode === 'you' ? (
             <ProfileTab key={address} myGoals={myGoals} profile={profile} address={address} onSave={saveProfile} />
           ) : (
             <DisciplineHome
               allGoals={allGoals}
               myGoals={myGoals}
+              statuses={myStatuses}
+              friendCount={contacts.length}
               loadingGoals={loadingGoals}
               onStart={() => startBuilder()}
             />
@@ -1786,7 +1899,7 @@ export default function App() {
               onClose={() => setInviteId(null)}
             />
           ) : null}
-          {appMode !== 'intro' && !invited ? <BottomNav active={appMode} onSelect={selectMode} /> : null}
+          {appMode !== 'intro' && !invited ? <BottomNav active={appMode} onSelect={selectMode} pending={refereeRequests.length} /> : null}
         </main>
       )}
 

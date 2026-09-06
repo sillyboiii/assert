@@ -1215,6 +1215,63 @@ main {
   background: var(--red);
 }
 
+.friend-requests {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.request-card {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #fff;
+}
+
+.request-card .friend-card {
+  padding: 14px;
+}
+
+.request-card .friend-bubble.request-actions {
+  position: static;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 14px 14px;
+  border: none;
+  box-shadow: none;
+  animation: none;
+}
+
+.request-card .friend-bubble.request-actions button,
+.request-card .friend-bubble.request-actions .btn {
+  flex: 1;
+  min-width: 96px;
+  margin: 0;
+  padding: 9px 12px;
+  font-size: 12px;
+  text-align: center;
+  border-radius: 14px;
+}
+
+.request-card .friend-bubble.request-actions .btn.ghost {
+  border: 1px solid var(--line);
+  background: #f8faff;
+  color: var(--indigo);
+}
+
+.request-card .friend-bubble.request-actions .btn.ghost:hover {
+  background: var(--blue);
+  color: var(--white);
+  border-color: var(--blue);
+}
+
+.request-card .friend-bubble.request-actions .btn.green {
+  background: var(--green);
+  color: #fff;
+}
+
 .referee-picker-wrap {
   position: relative;
   display: grid;
@@ -1887,6 +1944,7 @@ img.profile-avatar {
 }
 
 .bottom-nav button {
+  position: relative;
   height: 44px;
   border: none;
   border-radius: 18px;
@@ -1900,6 +1958,22 @@ img.profile-avatar {
 .bottom-nav button.active:not(.nav-plus) {
   background: #f8faff;
   color: var(--blue-deep);
+}
+
+.nav-badge {
+  position: absolute;
+  top: 2px;
+  right: 14px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 17px;
+  text-align: center;
 }
 
 .bottom-nav .nav-plus {
