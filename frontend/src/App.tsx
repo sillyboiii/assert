@@ -684,16 +684,43 @@ function sampleStatus(id: bigint): AssertFilter {
   return (['Live', 'Pending', 'Won', 'Bailed'] as const)[Number(id % 4n)];
 }
 
+function assertProgress(goalText: string, id: bigint) {
+  const durationMatch = goalText.match(/(\d+)\s*(?:day|days)/i);
+  const totalDays = durationMatch ? Number(durationMatch[1]) : goalText.includes('month') ? 30 : 14;
+  const seed = Number(id % 9n);
+  const daysDone = goalText.includes('no junk food') ? 18 : Math.min(totalDays - 1, 4 + seed);
+  return {
+    daysDone,
+    totalDays,
+    progress: Math.max(8, Math.round((daysDone / totalDays) * 100)),
+  };
+}
+
 function AssertPreviewCard({ goal, status }: { goal: CreatedArgs; status: AssertFilter }) {
   const cd = useCountdown(goal.deadline);
+  const { daysDone, totalDays, progress } = assertProgress(goal.goalText, goal.id);
   return (
     <button className="assert-preview-card">
-      <div className="assert-preview-top">
-        <span className={`assert-pill ${status.toLowerCase()}`}>{status}</span>
+      <div className="assert-pass-top">
+        <span className={`live-pill ${status.toLowerCase()}`}>{status}</span>
         <b>{fmt(goal.amount)} ETH</b>
       </div>
       <h3>{goal.goalText}</h3>
-      <p>{short(goal.referee)} is referee · {cd.expired ? 'done' : cd.out}</p>
+      <div className="assert-progress" aria-label={`${daysDone} of ${totalDays} days complete`}>
+        <div className="assert-progress-head">
+          <span>check-in progress</span>
+          <b>{daysDone} / {totalDays} days</b>
+        </div>
+        <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
+      </div>
+      <div className="assert-human-row">
+        <span>{short(goal.referee, 4)} · referee</span>
+        <span>{cd.expired ? 'done' : `${cd.out} left`}</span>
+      </div>
+      <div className="assert-risk-strip">
+        <span>Bail → referee gets {fmt(goal.amount)} ETH</span>
+        <small>demo</small>
+      </div>
     </button>
   );
 }
@@ -810,14 +837,29 @@ function ProfileTab({ myGoals }: { myGoals: CreatedArgs[] }) {
 
 function ActiveMiniCard({ goal, isExample }: { goal: CreatedArgs; isExample: boolean }) {
   const cd = useCountdown(goal.deadline);
+  const { daysDone, totalDays, progress } = assertProgress(goal.goalText, goal.id);
+  const refereeName = isExample ? 'Josh' : short(goal.referee, 4);
   return (
-    <button className="active-mini-card">
-      <span className="mini-label">{isExample ? 'example' : 'live'}</span>
-      <h3>{goal.goalText}</h3>
-      <p>{isExample ? `Josh gets your ${fmt(goal.amount)} ETH if you bail.` : `${short(goal.referee)} is watching`}</p>
-      <div className="mini-foot">
+    <button className="active-mini-card" aria-label={`Open assert: ${goal.goalText}`}>
+      <div className="assert-pass-top">
+        <span className="live-pill">LIVE</span>
         <b>{fmt(goal.amount)} ETH</b>
-        <span>{cd.expired ? 'done' : cd.out}</span>
+      </div>
+      <h3>{goal.goalText}</h3>
+      <div className="assert-progress" aria-label={`${daysDone} of ${totalDays} days complete`}>
+        <div className="assert-progress-head">
+          <span>check-in progress</span>
+          <b>{daysDone} / {totalDays} days</b>
+        </div>
+        <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
+      </div>
+      <div className="assert-human-row">
+        <span>{refereeName} · referee</span>
+        <span>{cd.expired ? 'done' : `${cd.out} left`}</span>
+      </div>
+      <div className="assert-risk-strip">
+        <span>Bail → {refereeName} gets {fmt(goal.amount)} ETH</span>
+        {isExample ? <small>demo</small> : null}
       </div>
     </button>
   );
@@ -1020,6 +1062,7 @@ function GoalCard({ id }: { id: string }) {
   const isReferee = address === referee;
   const now = BigInt(Math.floor(Date.now() / 1000));
   const daysLeft = Number((deadline - now) / 86400n);
+  const { daysDone, totalDays, progress } = assertProgress(goalText, BigInt(id));
   const refund = amount - feeAmount;
 
   const run = async (functionName: 'acceptRole' | 'approve' | 'cancel' | 'claimReferee') => {
@@ -1034,18 +1077,25 @@ function GoalCard({ id }: { id: string }) {
   };
 
   return (
-    <div className="card goal fade-up-1">
-      <div className="goal-top">
+    <div className="card goal assert-detail-card fade-up-1">
+      <div className="goal-top assert-pass-top">
         <span className={`status s${status}`}>{STATUS_LABEL[status]}</span>
-        <span className="muted">
-          {isCreator ? 'you' : short(creator)} vs {isReferee ? 'you' : short(referee)}
-        </span>
+        <b>{fmt(amount)} ETH</b>
       </div>
       <p className="goal-text">{goalText}</p>
-      <div className="goal-meta">
-        <div className="pot">
-          <b>{fmt(amount)}</b> <span>ETH pot</span>
+      <div className="assert-progress" aria-label={`${daysDone} of ${totalDays} days complete`}>
+        <div className="assert-progress-head">
+          <span>check-in progress</span>
+          <b>{daysDone} / {totalDays} days</b>
         </div>
+        <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
+      </div>
+      <div className="assert-human-row goal-human-row">
+        <span>{isReferee ? 'you' : short(referee, 4)} · referee</span>
+        <span>{expired ? 'done' : `${out} left`}</span>
+      </div>
+      <div className="goal-meta">
+        <span>{isCreator ? 'you' : short(creator, 4)} asserted it</span>
         {status === 1 && (
           <div className={`countdown${urgent ? ' urgent' : ''}`}>
             {expired ? '0h 0m 00s' : out}
@@ -1066,6 +1116,11 @@ function GoalCard({ id }: { id: string }) {
             <b>{fmt(refund)} to referee</b>
           </div>
           <div className="outcome fee">protocol fee {fmt(feeAmount)} ({Number((feeAmount * 10000n) / amount)} bps)</div>
+        </div>
+      )}
+      {(status === 0 || status === 1) && (
+        <div className="assert-risk-strip detail-risk-strip">
+          <span>Bail → {isReferee ? 'you' : short(referee, 4)} gets {fmt(refund)} ETH</span>
         </div>
       )}
       <div className="goal-actions">
