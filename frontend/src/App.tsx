@@ -732,7 +732,11 @@ function ConnectedIntro({ onStart, profile }: { onStart: () => void; profile: Us
     <section className="intro-scene">
       <div className="intro-profile intro-line intro-line-1">
         <ProfileAvatar profile={profile} />
-        <span>{profile.locked ? profile.username : 'wallet connected.'}</span>
+        {profile.locked ? (
+          <span>{profile.username}</span>
+        ) : (
+          <img className="intro-wordmark" src="/wordmark.png" alt="assert" />
+        )}
       </div>
       <h2 className="intro-line intro-line-2">you ready to become a more disciplined version of yourself?</h2>
       <p className="intro-line intro-line-3">
