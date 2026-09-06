@@ -1211,6 +1211,25 @@ function LandingFinalCta() {
   );
 }
 
+function LandingSubstance() {
+  return (
+    <section className="landing-substance" aria-label="how Assert works">
+      <div>
+        <span>promise</span>
+        <p>say the thing you keep putting off.</p>
+      </div>
+      <div>
+        <span>stake</span>
+        <p>put real money behind your word.</p>
+      </div>
+      <div>
+        <span>referee</span>
+        <p>your friend calls it when time is up.</p>
+      </div>
+    </section>
+  );
+}
+
 /* ---------------- app ---------------- */
 
 export default function App() {
@@ -1254,6 +1273,7 @@ export default function App() {
 
           <main className="landing-main">
             <LandingActivity />
+            <LandingSubstance />
             <LandingFinalCta />
           </main>
         </>

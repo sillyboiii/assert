@@ -113,7 +113,7 @@ header:empty {
 
 .landing-hero-inner {
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(360px, 0.72fr);
+  grid-template-columns: minmax(320px, 0.82fr) minmax(430px, 0.88fr);
   align-items: center;
   gap: clamp(18px, 4vw, 56px);
   width: min(100%, 1040px);
@@ -191,17 +191,28 @@ header:empty {
   position: relative;
   display: block;
   z-index: 2;
-  width: min(100%, 520px);
+  width: min(100%, 640px);
   height: auto;
   margin: 0;
-  border-radius: 30px;
-  filter: drop-shadow(0 24px 48px rgba(64, 92, 255, 0.13));
+  transform: rotate(-3deg);
+  filter: drop-shadow(0 30px 58px rgba(64, 92, 255, 0.22));
 }
 
 .landing-card-stack {
   position: relative;
-  width: min(100%, 460px);
+  width: min(100%, 640px);
   justify-self: end;
+}
+
+.landing-card-stack::before {
+  content: '';
+  position: absolute;
+  inset: 13% 2% 9% 8%;
+  border-radius: 42px;
+  background: rgba(64, 92, 255, 0.22);
+  filter: blur(38px);
+  transform: rotate(-3deg);
+  z-index: 0;
 }
 
 .landing-page .aurora::before,
@@ -214,7 +225,7 @@ header:empty {
   width: 100%;
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(238, 241, 255, 0) 0%, rgba(238, 241, 255, 0.56) 46%, rgba(238, 241, 255, 0) 86%);
+    linear-gradient(180deg, rgba(238, 241, 255, 0) 0%, rgba(238, 241, 255, 0.46) 42%, rgba(255, 255, 255, 0.9) 82%, var(--white) 100%);
 }
 
 .how-compact {
@@ -253,6 +264,39 @@ header:empty {
   margin: -14px auto 0;
   padding: 28px 0 84px;
   pointer-events: none;
+}
+
+.landing-substance {
+  width: min(100%, 880px);
+  margin: -18px auto 72px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+  color: var(--indigo);
+}
+
+.landing-substance div {
+  border-top: 1px solid rgba(17, 20, 61, 0.12);
+  padding-top: 16px;
+}
+
+.landing-substance span {
+  color: var(--blue-deep);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.landing-substance p {
+  margin: 8px 0 0;
+  max-width: 220px;
+  font-family: var(--font-display);
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 800;
+  line-height: 0.96;
+  letter-spacing: -0.03em;
+  text-transform: lowercase;
 }
 
 .landing-activity::before {
@@ -316,6 +360,7 @@ header:empty {
   font-size: clamp(42px, 8vw, 78px);
   line-height: 0.9;
   letter-spacing: -0.04em;
+  color: var(--indigo);
   text-transform: lowercase;
 }
 
@@ -330,8 +375,9 @@ header:empty {
   padding: 168px max(24px, calc((100vw - 1080px) / 2 + 24px)) 112px;
   text-align: center;
   background:
-    linear-gradient(135deg, var(--indigo), #1f286f 58%, var(--blue));
-  color: var(--white);
+    radial-gradient(circle at 50% 0%, rgba(64, 92, 255, 0.1), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0), var(--white) 34%, var(--white));
+  color: var(--indigo);
   border: none;
 }
 
@@ -341,9 +387,9 @@ header:empty {
 }
 
 .landing-final .btn-primary {
-  background: var(--white);
-  color: var(--blue-deep);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.18);
+  background: var(--blue);
+  color: var(--white);
+  box-shadow: 0 16px 36px rgba(64, 92, 255, 0.28);
 }
 
 .landing-footer {
@@ -354,17 +400,17 @@ header:empty {
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 54px;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--muted);
   font-size: 13px;
 }
 
 .landing-footer span:first-child {
-  color: var(--white);
+  color: var(--indigo);
   font-weight: 900;
 }
 
 .landing-footer a {
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--muted);
   text-decoration: none;
 }
 
@@ -1796,9 +1842,10 @@ select:focus {
   }
 
   .landing-phone {
-    width: min(100%, 340px);
-    padding: 20px;
-    border-radius: 30px;
+    width: min(108%, 390px);
+    max-width: none;
+    padding: 0;
+    transform: rotate(-2deg) translateX(6px);
     margin-bottom: 14px;
   }
 
@@ -1807,6 +1854,11 @@ select:focus {
     justify-self: stretch;
     display: grid;
     justify-items: end;
+  }
+
+  .landing-card-stack::before {
+    inset: 16% 2% 12% 10%;
+    filter: blur(28px);
   }
 
   .landing-main {
@@ -1819,6 +1871,16 @@ select:focus {
     width: 100%;
     margin: -10px auto 0;
     padding: 18px 0 58px;
+  }
+
+  .landing-substance {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin: -12px auto 46px;
+  }
+
+  .landing-substance p {
+    max-width: 100%;
   }
 
   .landing-activity::before {
@@ -1876,7 +1938,7 @@ select:focus {
 
   .landing-final {
     margin-bottom: -64px;
-    padding: 92px 18px 74px;
+    padding: 80px 18px 74px;
   }
 
   .landing-footer {
