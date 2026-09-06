@@ -1205,7 +1205,6 @@ function LandingFinalCta() {
       <div className="landing-footer">
         <span>Assert</span>
         <span>built on Base</span>
-        <a href="https://base.org" target="_blank" rel="noreferrer">base.org</a>
       </div>
     </section>
   );

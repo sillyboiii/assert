@@ -230,7 +230,7 @@ header:empty {
   width: 100%;
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(238, 241, 255, 0) 0%, rgba(238, 241, 255, 0.46) 42%, rgba(255, 255, 255, 0.9) 82%, var(--white) 100%);
+    linear-gradient(180deg, rgba(250, 248, 242, 0) 0%, rgba(255, 255, 255, 0.52) 48%, var(--white) 100%);
 }
 
 .how-compact {
@@ -380,7 +380,6 @@ header:empty {
   padding: 168px max(24px, calc((100vw - 1080px) / 2 + 24px)) 112px;
   text-align: center;
   background:
-    radial-gradient(circle at 50% 0%, rgba(64, 92, 255, 0.1), transparent 42%),
     linear-gradient(180deg, rgba(255, 255, 255, 0), var(--white) 34%, var(--white));
   color: var(--indigo);
   border: none;
@@ -1280,6 +1279,26 @@ main {
 
 .bottom-nav .nav-plus.active {
   transform: translateY(-2px);
+}
+
+@media (min-width: 821px) {
+  .social-app {
+    width: min(100%, 940px);
+  }
+
+  .active-scroll {
+    grid-auto-columns: minmax(280px, 38%);
+  }
+
+  .friend-card {
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+  }
+
+  .bottom-nav {
+    width: min(calc(100vw - 48px), 640px);
+    grid-template-columns: 1fr 1fr 72px 1fr 1fr;
+    padding: 9px;
+  }
 }
 
 .discipline-home {
