@@ -965,14 +965,21 @@ function FriendsTab({
 }) {
   const { writeContractAsync, isPending } = useWriteContract();
   const dismissKey = address ? `assert-dismiss-referee:${address.toLowerCase()}` : '';
+  const hiddenFriendKey = address ? `assert-hidden-friends:${address.toLowerCase()}` : '';
   const [dismissed, setDismissed] = useState<string[]>(() => {
     if (!address) return [];
     try { return JSON.parse(localStorage.getItem(dismissKey) ?? '[]'); } catch { return []; }
   });
+  const [hiddenFriends, setHiddenFriends] = useState<string[]>(() => {
+    if (!address) return [];
+    try { return JSON.parse(localStorage.getItem(hiddenFriendKey) ?? '[]'); } catch { return []; }
+  });
   const [openFriend, setOpenFriend] = useState<string | null>(null);
   const visibleRequests = requests.filter((r) => !dismissed.includes(r.id.toString()));
   const [filter, setFilter] = useState('');
-  const filteredContacts = contacts.filter((a) => !filter || short(a, 4).toLowerCase().includes(filter.toLowerCase()));
+  const filteredContacts = contacts.filter(
+    (a) => !hiddenFriends.includes(a.toLowerCase()) && (!filter || short(a, 4).toLowerCase().includes(filter.toLowerCase())),
+  );
   const accept = async (id: bigint) => {
     const h = await writeContractAsync({ address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id] });
     await waitForTx(h);
@@ -982,6 +989,12 @@ function FriendsTab({
     const next = [...dismissed, id.toString()];
     setDismissed(next);
     if (address) localStorage.setItem(dismissKey, JSON.stringify(next));
+  };
+  const unfriend = (friendAddress: `0x${string}`) => {
+    const next = [...hiddenFriends, friendAddress.toLowerCase()];
+    setHiddenFriends(next);
+    setOpenFriend(null);
+    if (address) localStorage.setItem(hiddenFriendKey, JSON.stringify(next));
   };
   return (
     <div className="social-app fade-up">
@@ -1047,12 +1060,10 @@ function FriendsTab({
                   {openFriend === a ? (
                     <div className="friend-bubble" role="menu">
                       <button type="button" onClick={() => onStart(f)}>
-                        new assert with them
-                        <small>{f.detail}</small>
+                        send assert request
                       </button>
-                      <button type="button" onClick={() => navigator.clipboard.writeText(a)}>
-                        copy wallet
-                        <small>{short(a, 6)}</small>
+                      <button type="button" className="danger" onClick={() => unfriend(a)}>
+                        unfriend
                       </button>
                     </div>
                   ) : null}
