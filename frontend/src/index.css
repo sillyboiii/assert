@@ -2481,6 +2481,7 @@ select:focus {
 
 .review-card {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   padding: clamp(18px, 3vw, 24px);
   border-radius: 28px;
@@ -2492,6 +2493,7 @@ select:focus {
 
 .review-line,
 .review-split > div {
+  min-width: 0;
   display: grid;
   gap: 4px;
   padding: 15px 16px;
@@ -2509,6 +2511,7 @@ select:focus {
   font-family: var(--font-display);
   line-height: 1.15;
   text-transform: lowercase;
+  overflow-wrap: anywhere;
 }
 
 .review-split {
