@@ -965,11 +965,9 @@ function DisciplineHome({
   const displayGoals = myGoals.length ? myGoals : SAMPLE_ASSERTS.slice(0, 2);
   return (
     <div className="social-app fade-up">
-      <div className="home-wordmark-row">
-        <img src="/wordmark.png" alt="Assert" />
-      </div>
       <section className="home-hero-card">
         <div>
+          <img className="home-card-wordmark" src="/wordmark.png" alt="Assert" />
           <span className="eyebrow">home</span>
           <h2>{active ? `${active} assert${active === 1 ? '' : 's'} on the line.` : 'nothing on the line yet.'}</h2>
           <p>

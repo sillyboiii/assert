@@ -845,6 +845,14 @@ main {
   box-shadow: 0 22px 42px rgba(64, 92, 255, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
+.assert-preview-card,
+.friend-card,
+.activity-row,
+.feed-row,
+.history-row {
+  animation: cardRise 0.32s ease both;
+}
+
 .assert-preview-top {
   display: flex;
   justify-content: space-between;
@@ -936,29 +944,33 @@ main {
   top: calc(100% - 4px);
   z-index: 8;
   display: grid;
-  gap: 6px;
-  min-width: 190px;
-  padding: 8px;
+  gap: 8px;
+  min-width: 230px;
+  padding: 10px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 18px 46px rgba(17, 20, 61, 0.14);
+  box-shadow: 0 22px 54px rgba(17, 20, 61, 0.16), 0 0 0 6px rgba(64, 92, 255, 0.04);
+  transform-origin: top right;
+  animation: bubblePop 0.22s cubic-bezier(0.2, 1.18, 0.42, 1) both;
 }
 
 .friend-bubble button {
   border: none;
-  border-radius: 13px;
+  border-radius: 15px;
   background: #f8faff;
   color: var(--indigo);
-  padding: 10px 12px;
+  padding: 13px 14px;
   text-align: left;
   font-weight: 900;
   cursor: pointer;
+  transition: transform 0.14s ease, background 0.14s ease, color 0.14s ease;
 }
 
 .friend-bubble button:hover {
   background: var(--blue);
   color: var(--white);
+  transform: translateX(3px);
 }
 
 .friend-bubble button.danger {
@@ -969,6 +981,17 @@ main {
 .friend-bubble button.danger:hover {
   color: var(--white);
   background: var(--red);
+}
+
+@keyframes bubblePop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .friend-meta {
@@ -1103,18 +1126,6 @@ img.profile-avatar {
   padding-bottom: 92px;
 }
 
-.home-wordmark-row {
-  display: flex;
-  justify-content: center;
-  padding: 4px 0 2px;
-}
-
-.home-wordmark-row img {
-  width: auto;
-  height: 42px;
-  display: block;
-}
-
 .home-hero-card {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -1127,6 +1138,13 @@ img.profile-avatar {
     var(--white);
   border: 1px solid rgba(64, 92, 255, 0.14);
   box-shadow: 0 18px 45px rgba(17, 20, 61, 0.08);
+}
+
+.home-card-wordmark {
+  display: block;
+  width: auto;
+  height: clamp(52px, 8vw, 78px);
+  margin: -8px 0 4px;
 }
 
 .home-hero-card h2 {
@@ -1245,7 +1263,7 @@ img.profile-avatar {
 }
 
 .active-mini-card:hover {
-  transform: translateY(-3px) rotate(-0.3deg);
+  transform: translateY(-5px) rotate(-0.4deg);
   box-shadow: 0 24px 48px rgba(64, 92, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
@@ -1351,6 +1369,17 @@ img.profile-avatar {
   height: 100%;
   border-radius: inherit;
   background: var(--blue);
+  position: relative;
+  overflow: hidden;
+}
+
+.assert-progress-track i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.38), transparent);
+  transform: translateX(-120%);
+  animation: progressSheen 2.6s ease-in-out infinite;
 }
 
 .assert-human-row {
@@ -1444,7 +1473,40 @@ img.profile-avatar {
 
 .activity-row:hover {
   border-color: rgba(64, 92, 255, 0.3);
-  transform: translateY(-1px);
+  transform: translateY(-2px) scale(1.005);
+}
+
+@keyframes cardRise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes progressSheen {
+  0%,
+  45% {
+    transform: translateX(-120%);
+  }
+  80%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .avatar {
@@ -1577,6 +1639,34 @@ img.profile-avatar {
 
 .bottom-nav .nav-plus.active {
   transform: translateY(-2px);
+}
+
+.bottom-nav button {
+  transition: transform 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.bottom-nav button:hover {
+  transform: translateY(-2px);
+}
+
+.bottom-nav .nav-plus:hover {
+  transform: translateY(-4px) scale(1.03);
+}
+
+.home-plus {
+  animation: softPulse 2.8s ease-in-out infinite;
+}
+
+@keyframes softPulse {
+  0%,
+  100% {
+    box-shadow: 0 14px 30px rgba(64, 92, 255, 0.28);
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow: 0 18px 38px rgba(64, 92, 255, 0.38);
+    transform: translateY(-2px);
+  }
 }
 
 @media (min-width: 821px) {
