@@ -1913,7 +1913,7 @@ export default function App() {
               onClose={() => setInviteId(null)}
             />
           ) : null}
-          {appMode !== 'intro' ? <BottomNav active={appMode} onSelect={selectMode} pending={refereeRequests.length} /> : null}
+          {appMode !== 'intro' || invited ? <BottomNav active={appMode} onSelect={selectMode} pending={refereeRequests.length} /> : null}
         </main>
       )}
 
