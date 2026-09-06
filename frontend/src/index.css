@@ -1220,7 +1220,7 @@ img.profile-avatar {
   display: block;
   width: auto;
   height: clamp(52px, 8vw, 78px);
-  margin: -10px 0 4px -20px;
+  margin: -10px 0 4px -26px;
 }
 
 .home-hero-card h2 {
@@ -3347,7 +3347,8 @@ footer a {
   transform: translateY(-1px);
 }
 
-.feed-actions button.on {
+.feed-actions .feed-heart.on,
+.feed-actions .feed-heart.on:hover {
   background: #ff5d8f;
   border-color: #ff5d8f;
   color: var(--white);
@@ -3379,4 +3380,98 @@ footer a {
 .feed-row.rank-3 {
   background: linear-gradient(135deg, #fdf3e8, #f0dcc2);
   border-color: #cf9a62;
+}
+
+/* ---------- assert card (expandable) ---------- */
+
+.assert-card {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  padding: 18px;
+  border: 1px solid rgba(64, 92, 255, 0.14);
+  border-radius: 26px;
+  background: linear-gradient(150deg, var(--white), #f8faff 118%);
+  color: var(--indigo);
+  min-height: 188px;
+  box-shadow: 0 18px 36px rgba(64, 92, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.assert-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 22px 44px rgba(64, 92, 255, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.assert-card.expanded {
+  min-height: 0;
+}
+
+.assert-card h3 {
+  margin: 4px 0 2px;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 6vw, 34px);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  text-transform: lowercase;
+}
+
+.assert-card .assert-human-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.assert-card .assert-human-row > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.assert-card .assert-human-row .mini-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.assert-card .time-left.urgent {
+  color: var(--amber);
+}
+
+.assert-details {
+  display: grid;
+  gap: 12px;
+  animation: cardRise 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.assert-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: lowercase;
+}
+
+.assert-toggle i {
+  font-style: normal;
+  font-size: 12px;
 }

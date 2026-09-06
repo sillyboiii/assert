@@ -756,22 +756,22 @@ type SocialFeedItem = {
   meta: string;
   badge: 'won' | 'live' | 'day' | 'folded';
   reaction: string;
-  comments?: string;
   result?: string;
   pfp?: string;
 };
 
 const SOCIAL_ACTIVITY: SocialFeedItem[] = [
-  { who: 'Josh', action: 'completed', body: 'Gym 4x this week', meta: 'Mia approved it · 20m ago', badge: 'won', reaction: '12', comments: '3', result: '+0.5 ETH kept' },
-  { who: 'Mia', action: 'put', body: '0.03 ETH on reading every day', meta: 'deadline in 7 days', badge: 'live', reaction: '8', comments: '5' },
-  { who: 'Ade', action: 'checked in', body: 'no nicotine, day 5', meta: 'Sam is watching', badge: 'day', reaction: '15', comments: '2' },
-  { who: 'Liv', action: 'bailed on', body: 'her 6am run', meta: 'referee got paid', badge: 'folded', reaction: '6', comments: '1', result: '0.25 ETH → referee' },
+  { who: 'Josh', action: 'completed', body: 'Gym 4x this week', meta: 'Mia approved it · 20m ago', badge: 'won', reaction: '12', result: '+0.5 ETH kept' },
+  { who: 'Mia', action: 'put', body: '0.03 ETH on reading every day', meta: 'deadline in 7 days', badge: 'live', reaction: '8' },
+  { who: 'Ade', action: 'checked in', body: 'no nicotine, day 5', meta: 'Sam is watching', badge: 'day', reaction: '15' },
+  { who: 'Liv', action: 'bailed on', body: 'her 6am run', meta: 'referee got paid', badge: 'folded', reaction: '6', result: '0.25 ETH → referee' },
 ];
 
 const PILL_LABEL: Record<SocialFeedItem['badge'], string> = { won: 'WON', live: 'LIVE', day: 'DAY 5', folded: 'FOLDED' };
 
 function SocialFeedRow({ item, onOpen }: { item: SocialFeedItem; onOpen?: () => void }) {
   const [hearted, setHearted] = useState(false);
+  const reaction = Number(item.reaction) + (hearted ? 1 : 0);
   return (
     <div className={`feed-item ${item.badge}`}>
       {item.pfp ? (
@@ -788,10 +788,14 @@ function SocialFeedRow({ item, onOpen }: { item: SocialFeedItem; onOpen?: () => 
         <p className="feed-item-body">{item.action} <strong>{item.body}</strong></p>
         <span className="feed-item-meta">{item.meta}</span>
         <div className="feed-actions">
-          <button className={hearted ? 'on' : ''} onClick={() => setHearted((h) => !h)} aria-label="react">
-            ♡ {hearted ? Number(item.reaction) + 1 : item.reaction}
+          <button
+            className={`feed-heart${hearted ? ' on' : ''}`}
+            aria-pressed={hearted}
+            onClick={() => setHearted((h) => !h)}
+            aria-label="react"
+          >
+            {hearted ? '♥' : '♡'} {reaction}
           </button>
-          <button aria-label="comment">💬 {item.comments}</button>
           <button onClick={onOpen} aria-label="open assert">open assert →</button>
         </div>
       </div>
@@ -837,31 +841,42 @@ function assertProgress(goalText: string, id: bigint) {
   };
 }
 
-function AssertPreviewCard({ goal, status }: { goal: CreatedArgs; status: AssertFilter }) {
+function AssertCard({ goal, status = 'Live', isExample = false }: { goal: CreatedArgs; status?: AssertFilter; isExample?: boolean }) {
   const cd = useCountdown(goal.deadline);
   const { daysDone, totalDays, progress } = assertProgress(goal.goalText, goal.id);
+  const refereeName = isExample ? 'Josh' : short(goal.referee, 4);
+  const [open, setOpen] = useState(false);
   return (
-    <button className="assert-preview-card">
+    <button
+      className={`assert-card${open ? ' expanded' : ''}`}
+      aria-expanded={open}
+      onClick={() => setOpen((o) => !o)}
+    >
       <div className="assert-pass-top">
         <span className={`live-pill ${status.toLowerCase()}`}>{status}</span>
         <b>{fmt(goal.amount)} ETH</b>
       </div>
       <h3>{goal.goalText}</h3>
-      <div className="assert-progress" aria-label={`${daysDone} of ${totalDays} days complete`}>
-        <div className="assert-progress-head">
-          <span>check-in progress</span>
-          <b>{daysDone} / {totalDays} days</b>
-        </div>
-        <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
-      </div>
       <div className="assert-human-row">
-        <span><MiniAvatar name="referee" />{short(goal.referee, 4)} · referee</span>
-        <span>{cd.expired ? 'done' : `${cd.out} left`}</span>
+        <span><MiniAvatar name={refereeName} />{refereeName} · referee</span>
+        <span className={cd.urgent && !cd.expired ? 'time-left urgent' : 'time-left'}>{cd.expired ? 'done' : `${cd.out} left`}</span>
       </div>
-      <div className="assert-risk-strip">
-        <span>Bail → referee gets {fmt(goal.amount)} ETH</span>
-        <small>demo</small>
-      </div>
+      {open ? (
+        <div className="assert-details">
+          <div className="assert-progress" aria-label={`${daysDone} of ${totalDays} days complete`}>
+            <div className="assert-progress-head">
+              <span>check-in progress</span>
+              <b>{daysDone} / {totalDays} days</b>
+            </div>
+            <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
+          </div>
+          <div className="assert-risk-strip">
+            <span>Bail → {refereeName} gets {fmt(goal.amount)} ETH</span>
+            {isExample ? <small>demo</small> : null}
+          </div>
+        </div>
+      ) : null}
+      <span className="assert-toggle">{open ? 'show less' : 'show more'}<i>{open ? '↑' : '↓'}</i></span>
     </button>
   );
 }
@@ -885,7 +900,7 @@ function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
           {myGoals.length ? (
             myGoals.map((g) => <GoalCard key={g.id.toString()} id={g.id.toString()} />)
           ) : examples.length ? (
-            examples.map((g) => <AssertPreviewCard key={g.id.toString()} goal={g} status={filter} />)
+            examples.map((g) => <AssertCard key={g.id.toString()} goal={g} status={filter} isExample />)
           ) : (
             <p className="empty-copy">nothing {filter.toLowerCase()} yet.</p>
           )}
@@ -1011,36 +1026,6 @@ function ProfileTab({
   );
 }
 
-function ActiveMiniCard({ goal, isExample }: { goal: CreatedArgs; isExample: boolean }) {
-  const cd = useCountdown(goal.deadline);
-  const { daysDone, totalDays, progress } = assertProgress(goal.goalText, goal.id);
-  const refereeName = isExample ? 'Josh' : short(goal.referee, 4);
-  return (
-    <button className="active-mini-card" aria-label={`Open assert: ${goal.goalText}`}>
-      <div className="assert-pass-top">
-        <span className="live-pill">LIVE</span>
-        <b>{fmt(goal.amount)} ETH</b>
-      </div>
-      <h3>{goal.goalText}</h3>
-      <div className="assert-progress" aria-label={`${daysDone} of ${totalDays} days complete`}>
-        <div className="assert-progress-head">
-          <span>check-in progress</span>
-          <b>{daysDone} / {totalDays} days</b>
-        </div>
-        <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
-      </div>
-      <div className="assert-human-row">
-        <span><MiniAvatar name={refereeName} />{refereeName} · referee</span>
-        <span>{cd.expired ? 'done' : `${cd.out} left`}</span>
-      </div>
-      <div className="assert-risk-strip">
-        <span>Bail → {refereeName} gets {fmt(goal.amount)} ETH</span>
-        {isExample ? <small>demo</small> : null}
-      </div>
-    </button>
-  );
-}
-
 function DisciplineHome({
   allGoals,
   myGoals,
@@ -1090,7 +1075,7 @@ function DisciplineHome({
           <span className="section-sub muted">what’s currently at risk</span>
         </div>
         <div className="active-scroll">
-          {displayGoals.map((g) => <ActiveMiniCard key={g.id.toString()} goal={g} isExample={!myGoals.length} />)}
+          {displayGoals.map((g) => <AssertCard key={g.id.toString()} goal={g} status="Live" isExample={!myGoals.length} />)}
         </div>
       </section>
 
