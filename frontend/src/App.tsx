@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, getAbiItem, getAddress, http, parseUnits, formatEther } from 'viem';
-import { base, baseSepolia, mainnet } from 'viem/chains';
+import { baseSepolia, mainnet } from 'viem/chains';
 import {
   useAccount,
   useConnect,
@@ -106,11 +106,6 @@ const mainnetClient = createPublicClient({
   transport: http('https://eth.llamarpc.com', { timeout: 8000 }),
 });
 
-const baseClient = createPublicClient({
-  chain: base,
-  transport: http('https://mainnet.base.org', { timeout: 15_000 }),
-});
-
 function walletMeta(id?: string): { name: string; initial: string; color: string } {
   switch (id) {
     case 'coinbaseWalletSDK':
@@ -191,12 +186,15 @@ function ConnectButton({ label = 'Connect wallet' }: { label?: string }) {
 
 function useAllCreated() {
   const createdEvent = getAbiItem({ abi: commitmentAbi, name: 'Created' });
+  const publicClient = usePublicClient();
+  const chainId = publicClient?.chain.id;
   return useQuery({
-    queryKey: ['allCreated'],
+    queryKey: ['allCreated', chainId],
     queryFn: async () => {
+      if (!publicClient) return [];
       // public base RPCs cap eth_getLogs at 10k-range windows, so we walk
       // backward from latest in chunks and stop at the deploy boundary
-      const latest = await baseClient.getBlockNumber();
+      const latest = await publicClient.getBlockNumber();
       const CHUNK = 9_900n; // RPC caps inclusive from..to at 10,000
       const MAX_CHUNKS = 40n; // ~396k blocks, way past the contract's young life
       const seen = new Map<string, CreatedArgs>();
@@ -204,7 +202,7 @@ function useAllCreated() {
         const to = latest - i * CHUNK;
         if (to <= 0n) break;
         const from = to - CHUNK < 0n ? 0n : to - CHUNK;
-        const logs = await baseClient.getLogs({
+        const logs = await publicClient.getLogs({
           address: COMMITMENT_ADDRESS,
           event: createdEvent,
           fromBlock: BigInt(from),
