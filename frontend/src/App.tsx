@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, getAbiItem, getAddress, http, parseUnits, formatEther } from 'viem';
-import { base, mainnet } from 'viem/chains';
+import { base, baseSepolia, mainnet } from 'viem/chains';
 import {
   useAccount,
   useConnect,
   useDisconnect,
   usePublicClient,
   useReadContract,
+  useSwitchChain,
   useWriteContract,
 } from 'wagmi';
 import { commitmentAbi } from './Commitment.abi.ts';
@@ -590,6 +591,9 @@ function CreateWizard({ onCreated, initialReferee }: { onCreated: (id: bigint) =
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
   const [resolvedReferee, setResolvedReferee] = useState<`0x${string}` | null>(null);
   const { writeContractAsync, isPending } = useWriteContract();
+  const { chainId } = useAccount();
+  const { switchChain } = useSwitchChain();
+  const onTestnet = chainId === baseSepolia.id;
   const publicClient = usePublicClient();
 
   const stepsLabel = ['promise', 'stake', 'friend', 'proof', 'confirm'];
@@ -622,6 +626,10 @@ function CreateWizard({ onCreated, initialReferee }: { onCreated: (id: bigint) =
   const submit = async () => {
     setError('');
     try {
+      if (chainId !== baseSepolia.id) {
+        setError('switch your wallet to base sepolia (testnet) before creating — mainnet uses real money.');
+        return;
+      }
       const deadline = BigInt(Math.floor(Date.now() / 1000) + days * 86400);
       const gh = await writeContractAsync({
         address: COMMITMENT_ADDRESS,
@@ -667,6 +675,19 @@ function CreateWizard({ onCreated, initialReferee }: { onCreated: (id: bigint) =
     >
       <div className="wizard-head">
         <h2>new assert</h2>
+        <div className="network-chip-row">
+          {onTestnet ? (
+            <span className="network-chip testnet">base sepolia · testnet</span>
+          ) : (
+            <button
+              type="button"
+              className="network-chip switch"
+              onClick={() => switchChain({ chainId: baseSepolia.id })}
+            >
+              switch to base sepolia ↻
+            </button>
+          )}
+        </div>
         <div className="steps-track">
           {stepsLabel.map((s, i) => (
             <div

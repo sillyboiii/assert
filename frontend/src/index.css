@@ -2157,6 +2157,45 @@ img.profile-avatar {
   text-transform: lowercase;
 }
 
+.network-chip-row {
+  display: flex;
+}
+
+.network-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  cursor: default;
+}
+
+.network-chip.testnet {
+  background: rgba(47, 181, 125, 0.12);
+  border-color: rgba(47, 181, 125, 0.25);
+  color: var(--green);
+}
+
+.network-chip.switch {
+  cursor: pointer;
+  color: var(--blue);
+  border-color: var(--line);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.network-chip.switch:hover {
+  background: var(--lavender);
+  border-color: var(--blue);
+}
+
 .steps-track {
   display: flex;
   gap: 8px;
