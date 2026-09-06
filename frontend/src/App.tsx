@@ -8,6 +8,7 @@ import {
   useDisconnect,
   usePublicClient,
   useReadContract,
+  useReadContracts,
   useSwitchChain,
   useWriteContract,
 } from 'wagmi';
@@ -183,6 +184,18 @@ function ConnectButton({ label = 'Connect wallet' }: { label?: string }) {
 }
 
 /* ---------------- data hook: all created goals ---------------- */
+
+function useGoalsByIds(ids: bigint[]) {
+  const { data } = useReadContracts({
+    contracts: ids.map((id) => ({
+      address: COMMITMENT_ADDRESS,
+      abi: commitmentAbi,
+      functionName: 'goals' as const,
+      args: [id],
+    })),
+  });
+  return (data ?? []).map((r) => r.result as GoalStruct | undefined);
+}
 
 function useAllCreated() {
   const createdEvent = getAbiItem({ abi: commitmentAbi, name: 'Created' });
@@ -872,21 +885,8 @@ function sampleStatus(id: bigint): AssertFilter {
   return (['Live', 'Pending', 'Won', 'Bailed'] as const)[Number(id % 4n)];
 }
 
-function assertProgress(goalText: string, id: bigint) {
-  const durationMatch = goalText.match(/(\d+)\s*(?:day|days)/i);
-  const totalDays = durationMatch ? Number(durationMatch[1]) : goalText.includes('month') ? 30 : 14;
-  const seed = Number(id % 9n);
-  const daysDone = goalText.includes('no junk food') ? 18 : Math.min(totalDays - 1, 4 + seed);
-  return {
-    daysDone,
-    totalDays,
-    progress: Math.max(8, Math.round((daysDone / totalDays) * 100)),
-  };
-}
-
 function AssertCard({ goal, status = 'Live', isExample = false }: { goal: CreatedArgs; status?: AssertFilter; isExample?: boolean }) {
   const cd = useCountdown(goal.deadline);
-  const { daysDone, totalDays, progress } = assertProgress(goal.goalText, goal.id);
   const refereeName = isExample ? 'Josh' : short(goal.referee, 4);
   const [open, setOpen] = useState(false);
   return (
@@ -906,13 +906,6 @@ function AssertCard({ goal, status = 'Live', isExample = false }: { goal: Create
       </div>
       {open ? (
         <div className="assert-details">
-          <div className="assert-progress" aria-label={`${daysDone} of ${totalDays} days complete`}>
-            <div className="assert-progress-head">
-              <span>check-in progress</span>
-              <b>{daysDone} / {totalDays} days</b>
-            </div>
-            <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
-          </div>
           <div className="assert-risk-strip">
             <span>Bail → {refereeName} gets {fmt(goal.amount)} ETH</span>
             {isExample ? <small>demo</small> : null}
@@ -941,7 +934,7 @@ function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
         </div>
         <div className="assert-card-list">
           {myGoals.length ? (
-            myGoals.map((g) => <GoalCard key={g.id.toString()} id={g.id.toString()} />)
+            myGoals.map((g) => <GoalCard key={g.id.toString()} id={g.id.toString()} only={filter} />)
           ) : examples.length ? (
             examples.map((g) => <AssertCard key={g.id.toString()} goal={g} status={filter} isExample />)
           ) : (
@@ -1012,8 +1005,19 @@ function ProfileTab({
   address?: `0x${string}`;
   onSave: (profile: UserProfile) => void;
 }) {
-  const total = myGoals.length;
-  const ethAtRisk = myGoals.reduce((sum, g) => sum + Number(formatEther(g.amount)), 0);
+  const goals = useGoalsByIds(myGoals.map((g) => g.id));
+  const won = goals.filter((g) => g?.[6] === 2).length;
+  const bailed = goals.filter((g) => g?.[6] === 3).length;
+  const finished = won + bailed;
+  const completion = finished ? `${Math.round((won / finished) * 100)}%` : '—';
+  const kept = goals.reduce(
+    (sum, g) => sum + (g && g[6] === 2 ? Number(formatEther(g[3])) : 0),
+    0,
+  );
+  const lost = goals.reduce(
+    (sum, g) => sum + (g && g[6] === 3 ? Number(formatEther(g[3] - g[4])) : 0),
+    0,
+  );
   const [username, setUsername] = useState(profile.username);
   const [pfpUrl, setPfpUrl] = useState(profile.pfpUrl);
   const profileChanged = username.trim() !== profile.username || pfpUrl.trim() !== profile.pfpUrl;
@@ -1050,10 +1054,10 @@ function ProfileTab({
           </button>
         </div>
         <div className="profile-stats">
-          <div><span>won</span><b>{Math.max(0, total - 1)}</b></div>
-          <div><span>completion</span><b>{total ? '80%' : '0%'}</b></div>
-          <div><span>kept</span><b>{ethAtRisk ? `${ethAtRisk.toFixed(2)} ETH` : '0 ETH'}</b></div>
-          <div><span>lost</span><b>0 ETH</b></div>
+          <div><span>won</span><b>{won}</b></div>
+          <div><span>completion</span><b>{completion}</b></div>
+          <div><span>kept</span><b>{kept ? `${kept.toFixed(2)} ETH` : '0 ETH'}</b></div>
+          <div><span>lost</span><b>{lost ? `${lost.toFixed(2)} ETH` : '0 ETH'}</b></div>
         </div>
       </section>
       <section className="tab-shell">
@@ -1237,7 +1241,7 @@ function ShareInvite({ id, referee, onClose }: { id: bigint; referee: string; on
 
 /* ---------------- goal card ---------------- */
 
-function GoalCard({ id }: { id: string }) {
+function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
   const { address } = useAccount();
   const { writeContractAsync, isPending } = useWriteContract();
   const { data } = useReadContract({
@@ -1251,11 +1255,23 @@ function GoalCard({ id }: { id: string }) {
   if (!raw) return null;
 
   const [creator, referee, goalText, amount, feeAmount, deadline, status] = raw;
+  if (only) {
+    const matches =
+      only === 'Live'
+        ? status === 1
+        : only === 'Pending'
+          ? status === 0
+          : only === 'Won'
+            ? status === 2
+            : only === 'Bailed'
+              ? status === 3
+              : false;
+    if (!matches) return null;
+  }
   const isCreator = address === creator;
   const isReferee = address === referee;
   const now = BigInt(Math.floor(Date.now() / 1000));
   const daysLeft = Number((deadline - now) / 86400n);
-  const { daysDone, totalDays, progress } = assertProgress(goalText, BigInt(id));
   const refund = amount - feeAmount;
 
   const run = async (functionName: 'acceptRole' | 'approve' | 'cancel' | 'claimReferee') => {
@@ -1276,13 +1292,6 @@ function GoalCard({ id }: { id: string }) {
         <b>{fmt(amount)} ETH</b>
       </div>
       <p className="goal-text">{goalText}</p>
-      <div className="assert-progress" aria-label={`${daysDone} of ${totalDays} days complete`}>
-        <div className="assert-progress-head">
-          <span>check-in progress</span>
-          <b>{daysDone} / {totalDays} days</b>
-        </div>
-        <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
-      </div>
       <div className="assert-human-row goal-human-row">
         <span><MiniAvatar name={isReferee ? 'you' : short(referee, 4)} />{isReferee ? 'you' : short(referee, 4)} · referee</span>
         <span>{expired ? 'done' : `${out} left`}</span>
