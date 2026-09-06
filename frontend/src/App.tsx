@@ -749,12 +749,65 @@ function ConnectedIntro({ onStart, profile }: { onStart: () => void; profile: Us
   );
 }
 
-const SOCIAL_ACTIVITY = [
-  { who: 'Josh', action: 'completed', body: 'Gym 4x this week', meta: 'Mia approved it · 20m ago', badge: 'won', reaction: '12' },
-  { who: 'Mia', action: 'put', body: '0.03 ETH on reading every day', meta: 'deadline in 7 days', badge: 'live', reaction: '8' },
-  { who: 'Ade', action: 'checked in', body: 'no nicotine, day 5', meta: 'Sam is watching', badge: 'day 5', reaction: '15' },
-  { who: 'Liv', action: 'bailed on', body: 'her 6am run', meta: 'referee got paid', badge: 'folded', reaction: '6' },
+type SocialFeedItem = {
+  who: string;
+  action: string;
+  body: string;
+  meta: string;
+  badge: 'won' | 'live' | 'day' | 'folded';
+  reaction: string;
+  comments?: string;
+  result?: string;
+  pfp?: string;
+};
+
+const SOCIAL_ACTIVITY: SocialFeedItem[] = [
+  { who: 'Josh', action: 'completed', body: 'Gym 4x this week', meta: 'Mia approved it · 20m ago', badge: 'won', reaction: '12', comments: '3', result: '+0.5 ETH kept' },
+  { who: 'Mia', action: 'put', body: '0.03 ETH on reading every day', meta: 'deadline in 7 days', badge: 'live', reaction: '8', comments: '5' },
+  { who: 'Ade', action: 'checked in', body: 'no nicotine, day 5', meta: 'Sam is watching', badge: 'day', reaction: '15', comments: '2' },
+  { who: 'Liv', action: 'bailed on', body: 'her 6am run', meta: 'referee got paid', badge: 'folded', reaction: '6', comments: '1', result: '0.25 ETH → referee' },
 ];
+
+const PILL_LABEL: Record<SocialFeedItem['badge'], string> = { won: 'WON', live: 'LIVE', day: 'DAY 5', folded: 'FOLDED' };
+
+function SocialFeedRow({ item, onOpen }: { item: SocialFeedItem; onOpen?: () => void }) {
+  const [hearted, setHearted] = useState(false);
+  return (
+    <div className={`feed-item ${item.badge}`}>
+      {item.pfp ? (
+        <img className="avatar feed-avatar" src={item.pfp} alt={item.who} />
+      ) : (
+        <div className="avatar feed-avatar">{item.who[0]}</div>
+      )}
+      <div className="feed-item-main">
+        <div className="feed-item-top">
+          <b className="feed-name">{item.who}</b>
+          <span className="feed-pill">{PILL_LABEL[item.badge]}</span>
+          {item.result ? <span className={`feed-result ${item.badge}`}>{item.result}</span> : null}
+        </div>
+        <p className="feed-item-body">{item.action} <strong>{item.body}</strong></p>
+        <span className="feed-item-meta">{item.meta}</span>
+        <div className="feed-actions">
+          <button className={hearted ? 'on' : ''} onClick={() => setHearted((h) => !h)} aria-label="react">
+            ♡ {hearted ? Number(item.reaction) + 1 : item.reaction}
+          </button>
+          <button aria-label="comment">💬 {item.comments}</button>
+          <button onClick={onOpen} aria-label="open assert">open assert →</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SocialFeed({ rows, onOpen }: { rows: SocialFeedItem[]; onOpen?: () => void }) {
+  return (
+    <div className="social-feed">
+      {rows.map((item) => (
+        <SocialFeedRow key={`${item.who}-${item.body}`} item={item} onOpen={onOpen} />
+      ))}
+    </div>
+  );
+}
 
 const FRIENDS: Friend[] = [
   { name: 'Josh', role: 'referee', record: '8 won · 2 bailed', detail: 'gym, running, early mornings', pfp: '', address: '0xA8EaF49c1c33F987eFE883FdE72d4a1c243fB9EC' },
@@ -880,20 +933,11 @@ function FriendsTab({ onStart }: { onStart: (friend?: Friend) => void }) {
           ))}
         </div>
       </section>
-      <section className="activity-panel embedded">
+      <section className="social-feed-section">
         <div className="section-head clean">
           <h2 className="section-title">their activity</h2>
         </div>
-        {SOCIAL_ACTIVITY.slice(0, 3).map((item) => (
-          <button className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`} onClick={() => onStart()}>
-            <div className="avatar">{item.who[0]}</div>
-            <div>
-              <p><b>{item.who}</b> {item.action} <strong>{item.body}</strong></p>
-              <span>{item.meta}</span>
-            </div>
-            <div className="activity-side"><b>{item.badge}</b><span>♡ {item.reaction}</span></div>
-          </button>
-        ))}
+        <SocialFeed rows={SOCIAL_ACTIVITY.slice(0, 3)} onOpen={() => onStart()} />
       </section>
     </div>
   );
@@ -1050,23 +1094,11 @@ function DisciplineHome({
         </div>
       </section>
 
-      <section className="activity-panel">
+      <section className="social-feed-section">
         <div className="section-head clean">
           <h2 className="section-title">friend activity</h2>
         </div>
-        {SOCIAL_ACTIVITY.map((item) => (
-          <button className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`} onClick={onStart}>
-            <div className="avatar">{item.who[0]}</div>
-            <div>
-              <p><b>{item.who}</b> {item.action} <strong>{item.body}</strong></p>
-              <span>{item.meta}</span>
-            </div>
-            <div className="activity-side">
-              <b>{item.badge}</b>
-              <span>♡ {item.reaction}</span>
-            </div>
-          </button>
-        ))}
+        <SocialFeed rows={SOCIAL_ACTIVITY} onOpen={onStart} />
       </section>
 
       <section className="app-panel your-panel social-panel">
@@ -1306,7 +1338,7 @@ const SAMPLE_ASSERTS: CreatedArgs[] = [
 function TopAssertRow({ goal, rank, seeded }: { goal: CreatedArgs; rank: number; seeded: boolean }) {
   const cd = useCountdown(goal.deadline);
   return (
-    <div className="feed-row fade-up-1">
+    <div className={`feed-row ${rank < 3 ? `rank rank-${rank + 1}` : ''} fade-up-1`}>
       <span className={`feed-rank${rank < 3 ? ' top' : ''}`}>
         {['🥇', '🥈', '🥉'][rank] ?? `#${rank + 1}`}
       </span>
