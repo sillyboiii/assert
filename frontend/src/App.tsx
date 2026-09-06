@@ -969,6 +969,7 @@ function FriendsTab({
     if (!address) return [];
     try { return JSON.parse(localStorage.getItem(dismissKey) ?? '[]'); } catch { return []; }
   });
+  const [openFriend, setOpenFriend] = useState<string | null>(null);
   const visibleRequests = requests.filter((r) => !dismissed.includes(r.id.toString()));
   const [filter, setFilter] = useState('');
   const filteredContacts = contacts.filter((a) => !filter || short(a, 4).toLowerCase().includes(filter.toLowerCase()));
@@ -1030,7 +1031,12 @@ function FriendsTab({
               };
               return (
                 <div className="friend-card-wrap" key={a}>
-                  <button className="friend-card" onClick={() => onStart(f)}>
+                  <button
+                    className="friend-card"
+                    type="button"
+                    aria-expanded={openFriend === a}
+                    onClick={() => setOpenFriend((current) => (current === a ? null : a))}
+                  >
                     <MiniAvatar name={f.name} src={f.pfp} />
                     <div>
                       <h3>{f.name}</h3>
@@ -1038,6 +1044,18 @@ function FriendsTab({
                     </div>
                     <div className="friend-meta"><b>{f.role}</b></div>
                   </button>
+                  {openFriend === a ? (
+                    <div className="friend-bubble" role="menu">
+                      <button type="button" onClick={() => onStart(f)}>
+                        new assert with them
+                        <small>{f.detail}</small>
+                      </button>
+                      <button type="button" onClick={() => navigator.clipboard.writeText(a)}>
+                        copy wallet
+                        <small>{short(a, 6)}</small>
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               );
             })
