@@ -661,7 +661,14 @@ function CreateWizard({ onCreated, initialReferee }: { onCreated: (id: bigint) =
       }
       onCreated(0n);
     } catch (e: any) {
-      setError(e?.shortMessage ?? e?.message ?? 'transaction failed');
+      const code = e?.cause?.code ?? e?.code;
+      const base =
+        code === 4001
+          ? 'you rejected the transaction in your wallet.'
+          : e?.shortMessage?.includes('reverted') || e?.cause?.data
+            ? 'the contract rejected this — check your stake, referee and deadline.'
+            : e?.shortMessage ?? e?.message ?? 'transaction failed';
+      setError(`${base}${code ? ` (code ${code})` : ''}`);
     }
   };
 
