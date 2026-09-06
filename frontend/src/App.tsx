@@ -591,7 +591,7 @@ function CreateWizard({ onCreated, initialReferee }: { onCreated: (id: bigint) =
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
   const [resolvedReferee, setResolvedReferee] = useState<`0x${string}` | null>(null);
   const { writeContractAsync, isPending } = useWriteContract();
-  const { chainId } = useAccount();
+  const { chainId, address } = useAccount();
   const { switchChain } = useSwitchChain();
   const onTestnet = chainId === baseSepolia.id;
   const publicClient = usePublicClient();
@@ -628,6 +628,23 @@ function CreateWizard({ onCreated, initialReferee }: { onCreated: (id: bigint) =
     try {
       if (chainId !== baseSepolia.id) {
         setError('switch your wallet to base sepolia (testnet) before creating — mainnet uses real money.');
+        return;
+      }
+      const amt = Number(stake);
+      if (!amt || amt < 0.001) {
+        setError('stake must be at least 0.001 ETH.');
+        return;
+      }
+      if (amt > 5) {
+        setError('stake can\'t exceed 5 ETH.');
+        return;
+      }
+      if (goalText.length > 280) {
+        setError(`keep goal + proof under 280 characters (currently ${goalText.length}).`);
+        return;
+      }
+      if (address && refereeResult.addr!.toLowerCase() === address.toLowerCase()) {
+        setError('referee can\'t be your own wallet.');
         return;
       }
       const deadline = BigInt(Math.floor(Date.now() / 1000) + days * 86400);
