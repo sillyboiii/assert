@@ -814,6 +814,7 @@ type SocialFeedItem = {
   reaction: string;
   result?: string;
   pfp?: string;
+  id?: string;
 };
 
 function activityFromGoals(
@@ -834,13 +835,13 @@ function activityFromGoals(
           : st === 4
             ? 'refunded to you'
             : undefined;
-    return { who: 'you', action, body: g.goalText, meta, badge, reaction: '0', result };
+    return { who: 'you', action, body: g.goalText, meta, badge, reaction: '0', result, id: g.id.toString() };
   });
 }
 
 const PILL_LABEL: Record<SocialFeedItem['badge'], string> = { won: 'WON', live: 'LIVE', day: 'DAY 5', folded: 'FOLDED' };
 
-function SocialFeedRow({ item, onOpen }: { item: SocialFeedItem; onOpen?: () => void }) {
+function SocialFeedRow({ item }: { item: SocialFeedItem }) {
   const [hearted, setHearted] = useState(false);
   const reaction = Number(item.reaction) + (hearted ? 1 : 0);
   return (
@@ -860,25 +861,26 @@ function SocialFeedRow({ item, onOpen }: { item: SocialFeedItem; onOpen?: () => 
         <span className="feed-item-meta">{item.meta}</span>
         <div className="feed-actions">
           <button
+            type="button"
             className={`feed-heart${hearted ? ' on' : ''}`}
             aria-pressed={hearted}
-            onClick={() => setHearted((h) => !h)}
+            onClick={(e) => { e.stopPropagation(); setHearted((h) => !h); }}
             aria-label="react"
           >
             {hearted ? '♥' : '♡'} {reaction}
           </button>
-          <button onClick={onOpen} aria-label="open assert">open assert →</button>
+          {item.id ? <a href={`#g/${item.id}`} className="feed-open">open assert →</a> : null}
         </div>
       </div>
     </div>
   );
 }
 
-function SocialFeed({ rows, onOpen }: { rows: SocialFeedItem[]; onOpen?: () => void }) {
+function SocialFeed({ rows }: { rows: SocialFeedItem[] }) {
   return (
     <div className="social-feed">
       {rows.map((item) => (
-        <SocialFeedRow key={`${item.who}-${item.body}`} item={item} onOpen={onOpen} />
+        <SocialFeedRow key={`${item.who}-${item.body}`} item={item} />
       ))}
     </div>
   );
@@ -1220,7 +1222,7 @@ function DisciplineHome({
           <h2 className="section-title">recent activity</h2>
         </div>
         {feed.length ? (
-          <SocialFeed rows={feed.slice(0, 4)} onOpen={onStart} />
+          <SocialFeed rows={feed.slice(0, 4)} />
         ) : (
           <p className="empty-copy">no activity yet.</p>
         )}

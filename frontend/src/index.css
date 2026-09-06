@@ -3670,6 +3670,27 @@ footer a {
   color: var(--white);
 }
 
+.feed-actions .feed-open {
+  display: inline-flex;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--muted);
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+  border: 1px solid rgba(64, 92, 255, 0.12);
+  transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+
+.feed-actions .feed-open:hover {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--white);
+  transform: translateY(-1px);
+}
+
 @media (max-width: 820px) {
   .feed-actions {
     opacity: 1;
