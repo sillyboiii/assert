@@ -39,6 +39,15 @@ type UserProfile = {
   locked: boolean;
 };
 
+type Friend = {
+  name: string;
+  role: string;
+  record: string;
+  detail: string;
+  pfp: string;
+  address: `0x${string}`;
+};
+
 const short = (a: `0x${string}` | undefined, n = 4) =>
   a ? `${a.slice(0, n + 2)}…${a.slice(-n)}` : '';
 const fmt = (w: bigint) => (w === 0n ? '0' : Number(formatEther(w)).toFixed(3).replace(/\.?0+$/, ''));
@@ -302,13 +311,17 @@ function Step2Referee({
   value,
   onChange,
   onResolved,
+  friends,
 }: {
   value: string;
   onChange: (v: string) => void;
   onResolved: (addr: `0x${string}` | null) => void;
+  friends: Friend[];
 }) {
   const [resolved, setResolved] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
+  const selectedFriend = friends.find((friend) => friend.address.toLowerCase() === value.trim().toLowerCase());
 
   useEffect(() => {
     let alive = true;
@@ -350,14 +363,45 @@ function Step2Referee({
 
   return (
     <div className="fade-up-1">
+      <div className="builder-copy">
+        <span className="eyebrow">friend</span>
+        <h3>who calls it?</h3>
+        <p className="muted">pick from your circle or paste a wallet. choose someone who won’t let you wiggle out.</p>
+      </div>
       <label>
         choose a friend
-        <input
-          name="referee"
-          placeholder="friend.eth or 0x1234…"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
+        <div className="referee-picker-wrap">
+          <button type="button" className="referee-picker-trigger" onClick={() => setShowFriends((open) => !open)}>
+            {selectedFriend ? (
+              <><MiniAvatar name={selectedFriend.name} src={selectedFriend.pfp} />{selectedFriend.name}</>
+            ) : (
+              <><MiniAvatar name="friend" />friends</>
+            )}
+          </button>
+          <input
+            name="referee"
+            placeholder="friend.eth or 0x1234…"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          {showFriends ? (
+            <div className="friend-bubble referee-bubble" role="menu">
+              {friends.map((friend) => (
+                <button
+                  key={friend.name}
+                  type="button"
+                  onClick={() => {
+                    onChange(friend.address);
+                    setShowFriends(false);
+                  }}
+                >
+                  <MiniAvatar name={friend.name} src={friend.pfp} />
+                  <span><b>{friend.name}</b><small>{friend.role} · {friend.record}</small></span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </label>
       {resolving && <p className="ens-hint">resolving ens…</p>}
       {resolved && <p className="ens-hint">✓ resolved → {short(addr)}</p>}
@@ -534,11 +578,11 @@ function Step4Review({
   );
 }
 
-function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
+function CreateWizard({ onCreated, initialReferee }: { onCreated: (id: bigint) => void; initialReferee?: string }) {
   const [step, setStep] = useState(0);
   const [goal, setGoal] = useState('');
   const [proof, setProof] = useState('');
-  const [referee, setReferee] = useState('');
+  const [referee, setReferee] = useState(initialReferee ?? '');
   const [stake, setStake] = useState('');
   const [intensity, setIntensity] = useState('');
   const [days, setDays] = useState(7);
@@ -645,7 +689,7 @@ function CreateWizard({ onCreated }: { onCreated: (id: bigint) => void }) {
           setIntensity={setIntensity}
         />
       )}
-      {step === 2 && <Step2Referee value={referee} onChange={setReferee} onResolved={setResolvedReferee} />}
+      {step === 2 && <Step2Referee value={referee} onChange={setReferee} onResolved={setResolvedReferee} friends={FRIENDS} />}
       {step === 3 && <Step4Proof proof={proof} setProof={setProof} />}
       {step === 4 && <Step4Review goal={goal} proof={proof} referee={refereeResult.addr ?? referee} stake={stake} days={days} />}
 
@@ -708,11 +752,11 @@ const SOCIAL_ACTIVITY = [
   { who: 'Liv', action: 'bailed on', body: 'her 6am run', meta: 'referee got paid', badge: 'folded', reaction: '6' },
 ];
 
-const FRIENDS = [
-  { name: 'Josh', role: 'referee', record: '8 won · 2 bailed', detail: 'gym, running, early mornings', pfp: '' },
-  { name: 'Mia', role: 'watching you', record: '12 won · 1 bailed', detail: 'reading, no sugar, focus blocks', pfp: '' },
-  { name: 'Ade', role: 'live assert', record: '5 day streak', detail: 'no nicotine', pfp: '' },
-  { name: 'Liv', role: 'referee', record: '4 won · 3 bailed', detail: 'wellness and sleep', pfp: '' },
+const FRIENDS: Friend[] = [
+  { name: 'Josh', role: 'referee', record: '8 won · 2 bailed', detail: 'gym, running, early mornings', pfp: '', address: '0xA8EaF49c1c33F987eFE883FdE72d4a1c243fB9EC' },
+  { name: 'Mia', role: 'watching you', record: '12 won · 1 bailed', detail: 'reading, no sugar, focus blocks', pfp: '', address: '0x8Ba1f109551bD432803012645Ac136ddd64DBA72' },
+  { name: 'Ade', role: 'live assert', record: '5 day streak', detail: 'no nicotine', pfp: '', address: '0x48665B930a1c3DcE69C9D2d1d58E97f13F5F0c1' },
+  { name: 'Liv', role: 'referee', record: '4 won · 3 bailed', detail: 'wellness and sleep', pfp: '', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
 ];
 
 type AppMode = 'intro' | 'home' | 'asserts' | 'builder' | 'friends' | 'you';
@@ -794,7 +838,7 @@ function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
   );
 }
 
-function FriendsTab({ onStart }: { onStart: () => void }) {
+function FriendsTab({ onStart }: { onStart: (friend?: Friend) => void }) {
   const [friends, setFriends] = useState(FRIENDS);
   const [selected, setSelected] = useState<string | null>(null);
   return (
@@ -824,7 +868,7 @@ function FriendsTab({ onStart }: { onStart: () => void }) {
               </button>
               {selected === f.name ? (
                 <div className="friend-bubble" role="menu">
-                  <button type="button" onClick={onStart}>send assert request</button>
+                  <button type="button" onClick={() => onStart(f)}>send assert request</button>
                   <button type="button" className="danger" onClick={() => setFriends((list) => list.filter((friend) => friend.name !== f.name))}>unfriend</button>
                 </div>
               ) : null}
@@ -837,7 +881,7 @@ function FriendsTab({ onStart }: { onStart: () => void }) {
           <h2 className="section-title">their activity</h2>
         </div>
         {SOCIAL_ACTIVITY.slice(0, 3).map((item) => (
-          <button className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`} onClick={onStart}>
+          <button className={`activity-row ${item.action.replaceAll(' ', '-')}`} key={`${item.who}-${item.body}`} onClick={() => onStart()}>
             <div className="avatar">{item.who[0]}</div>
             <div>
               <p><b>{item.who}</b> {item.action} <strong>{item.body}</strong></p>
@@ -1375,6 +1419,7 @@ export default function App() {
   const { isConnected, chainId, address } = useAccount();
   const [appMode, setAppMode] = useState<AppMode>('intro');
   const [profiles, setProfiles] = useState<Record<string, UserProfile>>(readProfiles);
+  const [draftReferee, setDraftReferee] = useState<string | undefined>();
   const onKnownChain = chainId === 8453 || chainId === 84532;
   const { data: allGoals, isLoading: loadingGoals } = useAllCreated();
   const profile = address ? profiles[address] ?? defaultProfile(address) : defaultProfile();
@@ -1396,6 +1441,14 @@ export default function App() {
     (g) => address && (g.creator === address || g.referee === address),
   );
   const invoked = invited ? (allGoals ?? []).find((g) => g.id.toString() === invited) : undefined;
+  const startBuilder = (friend?: Friend) => {
+    setDraftReferee(friend?.address);
+    setAppMode('builder');
+  };
+  const selectMode = (mode: AppMode) => {
+    if (mode === 'builder') setDraftReferee(undefined);
+    setAppMode(mode);
+  };
 
   return (
     <div className={`page${!isConnected ? ' landing-page' : ''}`}>
@@ -1437,12 +1490,12 @@ export default function App() {
               {!onKnownChain && (
                 <div className="banner action-warning">switch to <b>base</b> before locking an assert.</div>
               )}
-              <CreateWizard onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
+              <CreateWizard key={draftReferee ?? 'empty-referee'} initialReferee={draftReferee} onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
             </div>
           ) : appMode === 'asserts' ? (
             <AssertsTab myGoals={myGoals} />
           ) : appMode === 'friends' ? (
-            <FriendsTab onStart={() => setAppMode('builder')} />
+            <FriendsTab onStart={startBuilder} />
           ) : appMode === 'you' ? (
             <ProfileTab key={address} myGoals={myGoals} profile={profile} address={address} onSave={saveProfile} />
           ) : (
@@ -1450,7 +1503,7 @@ export default function App() {
               allGoals={allGoals}
               myGoals={myGoals}
               loadingGoals={loadingGoals}
-              onStart={() => setAppMode('builder')}
+              onStart={() => startBuilder()}
             />
           )}
           {inviteId ? (
@@ -1460,7 +1513,7 @@ export default function App() {
               onClose={() => setInviteId(null)}
             />
           ) : null}
-          {appMode !== 'intro' && !invited ? <BottomNav active={appMode} onSelect={setAppMode} /> : null}
+          {appMode !== 'intro' && !invited ? <BottomNav active={appMode} onSelect={selectMode} /> : null}
         </main>
       )}
 

@@ -967,10 +967,25 @@ main {
   transition: transform 0.14s ease, background 0.14s ease, color 0.14s ease;
 }
 
+.friend-bubble button span {
+  display: grid;
+  gap: 2px;
+}
+
+.friend-bubble button small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .friend-bubble button:hover {
   background: var(--blue);
   color: var(--white);
   transform: translateX(3px);
+}
+
+.friend-bubble button:hover small {
+  color: rgba(255, 255, 255, 0.74);
 }
 
 .friend-bubble button.danger {
@@ -981,6 +996,50 @@ main {
 .friend-bubble button.danger:hover {
   color: var(--white);
   background: var(--red);
+}
+
+.referee-picker-wrap {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.referee-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 118px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f8faff;
+  color: var(--blue-deep);
+  padding: 10px 12px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.referee-picker-trigger:hover {
+  transform: translateY(-1px);
+  border-color: rgba(64, 92, 255, 0.28);
+  box-shadow: 0 10px 24px rgba(64, 92, 255, 0.08);
+}
+
+.referee-bubble {
+  right: auto;
+  left: 0;
+  top: calc(100% + 8px);
+  width: min(100%, 390px);
+  min-width: min(100vw - 64px, 320px);
+  transform-origin: top left;
+}
+
+.referee-bubble button {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  gap: 10px;
 }
 
 @keyframes bubblePop {
