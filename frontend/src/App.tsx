@@ -66,6 +66,15 @@ function ProfileAvatar({ profile, fallback = 'Y' }: { profile: UserProfile; fall
   );
 }
 
+function MiniAvatar({ name, src }: { name: string; src?: string }) {
+  const initial = name.trim().slice(0, 1).toUpperCase() || 'A';
+  return src?.trim() ? (
+    <img className="mini-avatar" src={src.trim()} alt={`${name} pfp`} />
+  ) : (
+    <span className="mini-avatar">{initial}</span>
+  );
+}
+
 function useCountdown(deadline: bigint | undefined) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -700,10 +709,10 @@ const SOCIAL_ACTIVITY = [
 ];
 
 const FRIENDS = [
-  { name: 'Josh', role: 'referee', record: '8 won · 2 bailed', detail: 'gym, running, early mornings' },
-  { name: 'Mia', role: 'watching you', record: '12 won · 1 bailed', detail: 'reading, no sugar, focus blocks' },
-  { name: 'Ade', role: 'live assert', record: '5 day streak', detail: 'no nicotine' },
-  { name: 'Liv', role: 'referee', record: '4 won · 3 bailed', detail: 'wellness and sleep' },
+  { name: 'Josh', role: 'referee', record: '8 won · 2 bailed', detail: 'gym, running, early mornings', pfp: '' },
+  { name: 'Mia', role: 'watching you', record: '12 won · 1 bailed', detail: 'reading, no sugar, focus blocks', pfp: '' },
+  { name: 'Ade', role: 'live assert', record: '5 day streak', detail: 'no nicotine', pfp: '' },
+  { name: 'Liv', role: 'referee', record: '4 won · 3 bailed', detail: 'wellness and sleep', pfp: '' },
 ];
 
 type AppMode = 'intro' | 'home' | 'asserts' | 'builder' | 'friends' | 'you';
@@ -745,7 +754,7 @@ function AssertPreviewCard({ goal, status }: { goal: CreatedArgs; status: Assert
         <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
       </div>
       <div className="assert-human-row">
-        <span>{short(goal.referee, 4)} · referee</span>
+        <span><MiniAvatar name="referee" />{short(goal.referee, 4)} · referee</span>
         <span>{cd.expired ? 'done' : `${cd.out} left`}</span>
       </div>
       <div className="assert-risk-strip">
@@ -786,6 +795,8 @@ function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
 }
 
 function FriendsTab({ onStart }: { onStart: () => void }) {
+  const [friends, setFriends] = useState(FRIENDS);
+  const [selected, setSelected] = useState<string | null>(null);
   return (
     <div className="social-app fade-up">
       <section className="tab-shell">
@@ -798,18 +809,26 @@ function FriendsTab({ onStart }: { onStart: () => void }) {
         </div>
         <input className="friend-search" placeholder="search or invite a friend" />
         <div className="friend-list">
-          {FRIENDS.map((f) => (
-            <button className="friend-card" key={f.name} onClick={onStart}>
-              <div className="avatar">{f.name[0]}</div>
-              <div>
-                <h3>{f.name}</h3>
-                <p>{f.detail}</p>
-              </div>
-              <div className="friend-meta">
-                <b>{f.role}</b>
-                <span>{f.record}</span>
-              </div>
-            </button>
+          {friends.map((f) => (
+            <div className="friend-card-wrap" key={f.name}>
+              <button className="friend-card" onClick={() => setSelected(selected === f.name ? null : f.name)}>
+                <MiniAvatar name={f.name} src={f.pfp} />
+                <div>
+                  <h3>{f.name}</h3>
+                  <p>{f.detail}</p>
+                </div>
+                <div className="friend-meta">
+                  <b>{f.role}</b>
+                  <span>{f.record}</span>
+                </div>
+              </button>
+              {selected === f.name ? (
+                <div className="friend-bubble" role="menu">
+                  <button type="button" onClick={onStart}>send assert request</button>
+                  <button type="button" className="danger" onClick={() => setFriends((list) => list.filter((friend) => friend.name !== f.name))}>unfriend</button>
+                </div>
+              ) : null}
+            </div>
           ))}
         </div>
       </section>
@@ -849,6 +868,12 @@ function ProfileTab({
   const [pfpUrl, setPfpUrl] = useState(profile.pfpUrl);
   const profileChanged = username.trim() !== profile.username || pfpUrl.trim() !== profile.pfpUrl;
   const saveProfile = () => onSave({ username: username.trim() || short(address, 3) || 'you', pfpUrl: pfpUrl.trim(), locked: true });
+  const uploadPfp = (file: File | undefined) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => setPfpUrl(typeof reader.result === 'string' ? reader.result : pfpUrl);
+    reader.readAsDataURL(file);
+  };
   return (
     <div className="social-app fade-up">
       <section className="profile-card">
@@ -865,9 +890,10 @@ function ProfileTab({
             username
             <input value={username} maxLength={24} placeholder="sillyboi" onChange={(e) => setUsername(e.target.value)} />
           </label>
-          <label>
-            pfp url
-            <input value={pfpUrl} placeholder="https://..." onChange={(e) => setPfpUrl(e.target.value)} />
+          <label className="pfp-upload-label">
+            pfp
+            <input type="file" accept="image/*" onChange={(e) => uploadPfp(e.target.files?.[0])} />
+            <span>upload image</span>
           </label>
           <button className="btn-primary" type="button" onClick={saveProfile} disabled={!profileChanged && profile.locked}>
             {profile.locked ? 'update profile' : 'lock it in'}
@@ -912,7 +938,7 @@ function ActiveMiniCard({ goal, isExample }: { goal: CreatedArgs; isExample: boo
         <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
       </div>
       <div className="assert-human-row">
-        <span>{refereeName} · referee</span>
+        <span><MiniAvatar name={refereeName} />{refereeName} · referee</span>
         <span>{cd.expired ? 'done' : `${cd.out} left`}</span>
       </div>
       <div className="assert-risk-strip">
@@ -939,6 +965,9 @@ function DisciplineHome({
   const displayGoals = myGoals.length ? myGoals : SAMPLE_ASSERTS.slice(0, 2);
   return (
     <div className="social-app fade-up">
+      <div className="home-wordmark-row">
+        <img src="/wordmark.png" alt="Assert" />
+      </div>
       <section className="home-hero-card">
         <div>
           <span className="eyebrow">home</span>
@@ -1149,7 +1178,7 @@ function GoalCard({ id }: { id: string }) {
         <div className="assert-progress-track"><i style={{ width: `${progress}%` }} /></div>
       </div>
       <div className="assert-human-row goal-human-row">
-        <span>{isReferee ? 'you' : short(referee, 4)} · referee</span>
+        <span><MiniAvatar name={isReferee ? 'you' : short(referee, 4)} />{isReferee ? 'you' : short(referee, 4)} · referee</span>
         <span>{expired ? 'done' : `${out} left`}</span>
       </div>
       <div className="goal-meta">
