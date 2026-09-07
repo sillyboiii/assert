@@ -614,6 +614,7 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
   const [days, setDays] = useState(7);
   const [error, setError] = useState('');
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [resolvedReferee, setResolvedReferee] = useState<`0x${string}` | null>(null);
   const { writeContractAsync, isPending } = useWriteContract();
   const { chainId, address } = useAccount();
@@ -650,7 +651,9 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
           : true;
 
   const submit = async () => {
+    if (submitting) return;
     setError('');
+    setSubmitting(true);
     try {
       if (chainId !== base.id && chainId !== baseSepolia.id) {
         setError('switch your wallet to base before creating.');
@@ -712,6 +715,8 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
             ? 'the contract rejected this — check your stake, referee and deadline.'
             : e?.shortMessage ?? e?.message ?? 'transaction failed';
       setError(`${base}${code ? ` (code ${code})` : ''}`);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -763,6 +768,11 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
       {step === 4 && <Step4Review goal={goal} proof={proof} referee={refereeResult.addr ?? referee} stake={stake} days={days} />}
 
       {error && <p className="muted" style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
+      {submitting && !txHash && (
+        <p className="muted" style={{ fontSize: 13 }}>
+          waiting for your wallet to sign…
+        </p>
+      )}
       {txHash && !isPending && (
         <p className="muted" style={{ fontSize: 13 }}>
           tx {short(txHash, 6)} confirmed — finding your new assert…
@@ -787,8 +797,8 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
             next →
           </button>
         ) : (
-          <button type="submit" className="btn-primary" disabled={!canNext || isPending}>
-            {isPending ? 'locking…' : 'lock it in · assert it'}
+          <button type="submit" className="btn-primary" disabled={!canNext || isPending || submitting}>
+            {submitting ? 'waiting for wallet…' : isPending ? 'locking…' : 'lock it in · assert it'}
           </button>
         )}
       </div>
@@ -974,7 +984,7 @@ function HomeAssertCard({ goal, status }: { goal: CreatedArgs; status: number })
 function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
   const [filter, setFilter] = useState<AssertFilter>('Pending');
   return (
-    <div className="social-app fade-up">
+    <div className="social-app">
       <section className="tab-shell">
         <div className="tab-head">
           <span className="eyebrow">asserts</span>
@@ -1093,7 +1103,7 @@ function FriendsTab({
     };
   }, [address, dismissKey, hiddenFriendKey]);
   return (
-    <div className="social-app fade-up">
+    <div className="social-app">
       <section className="tab-shell">
         <div className="tab-head">
           <span className="eyebrow">friends</span>
@@ -1228,7 +1238,7 @@ function ProfileTab({
     reader.readAsDataURL(file);
   };
   return (
-    <div className="social-app fade-up">
+    <div className="social-app">
       <section className="profile-card">
         <div className="profile-top">
           <ProfileAvatar profile={{ ...profile, username, pfpUrl }} />
@@ -1305,7 +1315,7 @@ function DisciplineHome({
   const active = livePairs.length;
   const ethAtRisk = livePairs.reduce((sum, { g }) => sum + Number(formatEther(g.amount)), 0);
   return (
-    <div className="social-app fade-up">
+    <div className="social-app">
       <section className="home-hero-card">
         <div>
           <img className="home-card-wordmark" src="/wordmark.png" alt="Assert" />
@@ -2026,7 +2036,7 @@ export default function App() {
           {invited ? null : appMode === 'intro' ? (
             <ConnectedIntro onStart={() => setAppMode('home')} profile={profile} />
           ) : appMode === 'builder' ? (
-            <div className="create-screen fade-up">
+            <div className="create-screen">
               {!onKnownChain && (
                 <div className="banner action-warning">switch to <b>base</b> before locking an assert.</div>
               )}
