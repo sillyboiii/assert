@@ -1379,7 +1379,7 @@ function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
   const { out, urgent, expired } = useCountdown(raw?.[5]);
   if (!raw) return null;
 
-  const [creator, referee, goalText, amount, feeAmount, deadline, status] = raw;
+  const [creator, referee, goalText, amount, feeAmount, , status] = raw;
   if (only) {
     const matches =
       only === 'Live'
@@ -1395,8 +1395,6 @@ function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
   }
   const isCreator = address === creator;
   const isReferee = address === referee;
-  const now = BigInt(Math.floor(Date.now() / 1000));
-  const daysLeft = Number((deadline - now) / 86400n);
   const refund = amount - feeAmount;
 
   const run = async (functionName: 'acceptRole' | 'approve' | 'cancel' | 'claimReferee') => {
@@ -1419,18 +1417,10 @@ function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
       <p className="goal-text">{goalText}</p>
       <div className="assert-human-row goal-human-row">
         <span><MiniAvatar name={isReferee ? 'you' : short(referee, 4)} />{isReferee ? 'you' : short(referee, 4)} · referee</span>
-        <span>{expired ? 'done' : `${out} left`}</span>
+        <span className={urgent && !expired ? 'time-left urgent' : 'time-left'}>{expired ? 'done' : `${out} left`}</span>
       </div>
       <div className="goal-meta">
         <span>{isCreator ? 'you' : short(creator, 4)} asserted it</span>
-        {status === 1 && (
-          <div className={`countdown${urgent ? ' urgent' : ''}`}>
-            {expired ? '0h 0m 00s' : out}
-          </div>
-        )}
-        {status === 1 && !expired && (
-          <span className="muted">{daysLeft < 1 ? 'under a day left!' : `~${daysLeft}d left`}</span>
-        )}
       </div>
       {(status === 0 || status === 1) && (
         <div className="outcome-split">
