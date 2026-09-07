@@ -838,24 +838,41 @@ function splitGoalText(text: string): { title: string; description?: string } {
 }
 
 function activityFromGoals(
-  myGoals: CreatedArgs[],
+  goals: CreatedArgs[],
   statuses: (GoalStruct | undefined)[],
+  opts: { me?: `0x${string}`; contacts: `0x${string}`[]; profiles: Record<string, UserProfile> },
 ): SocialFeedItem[] {
-  return myGoals.map((g, i) => {
+  const me = opts.me?.toLowerCase() ?? '';
+  const isContact = new Set(opts.contacts.map((c) => c.toLowerCase()));
+  return goals.map((g, i) => {
     const st = statuses[i]?.[6];
+    const whoIsMe = g.creator.toLowerCase() === me;
+    const whoInCircle = isContact.has(g.creator.toLowerCase());
+    const who = whoIsMe ? 'you' : (whoInCircle ? (opts.profiles[g.creator]?.username ?? short(g.creator, 3)) : short(g.creator, 3));
     const badge: SocialFeedItem['badge'] =
       st === 2 ? 'won' : st === 3 ? 'folded' : st === 1 ? 'live' : 'day';
     const action = st === 2 ? 'won the assert' : st === 3 ? 'bailed on' : st === 4 ? 'cancelled' : st === 0 ? 'asserted' : 'is pushing';
-    const meta = st === 0 ? 'waiting on referee' : `status: ${STATUS_LABEL[st ?? 0].toLowerCase()}`;
+    const refereeName = g.referee.toLowerCase() === me ? 'you' : short(g.referee, 3);
+    const meta = st === 0 ? `waiting on ${refereeName}` : `referee: ${refereeName}`;
     const result =
       st === 2
         ? `+${fmt(g.amount)} ETH kept`
         : st === 3
           ? `${fmt(g.amount)} ETH → referee`
           : st === 4
-            ? 'refunded to you'
+            ? 'refunded'
             : undefined;
-    return { who: 'you', action, body: splitGoalText(g.goalText).title, meta, badge, reaction: '0', result, id: g.id.toString() };
+    return {
+      who,
+      action,
+      body: splitGoalText(g.goalText).title,
+      meta,
+      badge,
+      reaction: '0',
+      result,
+      id: g.id.toString(),
+      pfp: opts.profiles[g.creator]?.pfpUrl ?? '',
+    };
   });
 }
 
@@ -1266,6 +1283,7 @@ function ProfileTab({
 function DisciplineHome({
   myGoals,
   statuses,
+  feed,
   friendCount,
   onStart,
   onViewAsserts,
@@ -1273,6 +1291,7 @@ function DisciplineHome({
 }: {
   myGoals: CreatedArgs[];
   statuses: (GoalStruct | undefined)[];
+  feed: SocialFeedItem[];
   friendCount: number;
   onStart: () => void;
   onViewAsserts: () => void;
@@ -1286,7 +1305,6 @@ function DisciplineHome({
     .sort((a, b) => Number(a.g.deadline - b.g.deadline))[0];
   const active = livePairs.length;
   const ethAtRisk = livePairs.reduce((sum, { g }) => sum + Number(formatEther(g.amount)), 0);
-  const feed = activityFromGoals(myGoals, statuses);
   return (
     <div className="social-app fade-up">
       <section className="home-hero-card">
@@ -1894,7 +1912,6 @@ export default function App() {
   const refereeRequests = myGoals.filter(
     (g, i) => g.referee === address && myStatuses[i]?.[6] === 0,
   );
-  const feed = activityFromGoals(myGoals, myStatuses);
   const contacts = useMemo(() => {
     const set = new Set<`0x${string}`>();
     for (const g of allGoals ?? []) {
@@ -1903,6 +1920,19 @@ export default function App() {
     }
     return [...set];
   }, [allGoals, address]);
+  const circleGoals = useMemo(() => {
+    const isContact = new Set(contacts.map((c) => c.toLowerCase()));
+    return (allGoals ?? []).filter((g) => {
+      if (address && (g.creator === address || g.referee === address)) return true;
+      return isContact.has(g.creator.toLowerCase()) || isContact.has(g.referee.toLowerCase());
+    });
+  }, [allGoals, contacts, address]);
+  const circleStatuses = useGoalsByIds(circleGoals.map((g) => g.id));
+  const feed = activityFromGoals(circleGoals, circleStatuses, {
+    me: address,
+    contacts: [...contacts],
+    profiles,
+  });
   const contactFriends: Friend[] = useMemo(
     () =>
       contacts.map((a) => ({
@@ -2005,6 +2035,7 @@ export default function App() {
             <DisciplineHome
               myGoals={myGoals}
               statuses={myStatuses}
+              feed={feed}
               friendCount={contacts.length}
               onStart={() => startBuilder()}
               onViewAsserts={() => selectMode('asserts')}
