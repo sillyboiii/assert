@@ -2179,6 +2179,10 @@ img.profile-avatar {
   grid-row: 2 / span 2;
 }
 
+.top-panel .section-head {
+  margin-bottom: 16px;
+}
+
 .empty-copy {
   margin: 14px 0 0;
   color: var(--muted);
