@@ -1522,13 +1522,24 @@ img.profile-avatar {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 0;
   color: var(--muted);
   font-size: 14px;
   line-height: 1.4;
 }
 
-.on-line-strip span,
+.line-stat {
+  padding: 0 12px;
+}
+
+.line-stat:first-child {
+  padding-left: 0;
+}
+
+.line-stat + .line-stat {
+  border-left: 1px solid rgba(17, 20, 61, 0.14);
+}
+
 .mini-label,
 .activity-row span {
   color: var(--muted);
@@ -3558,6 +3569,10 @@ footer a {
   transform: translateY(-2px);
 }
 
+.feed-item + .feed-item {
+  border-top: 1px solid rgba(17, 20, 61, 0.08);
+}
+
 .feed-item.live {
   color: var(--indigo);
 }
@@ -3780,19 +3795,19 @@ footer a {
   gap: 12px;
   text-align: left;
   padding: 18px;
-  border: 1px solid rgba(64, 92, 255, 0.14);
+  border: 1px solid rgba(64, 92, 255, 0.12);
   border-radius: var(--radius-card);
-  background: linear-gradient(150deg, var(--white), #f8faff 118%);
+  background: #f6f8ff;
   color: var(--indigo);
   min-height: 188px;
-  box-shadow: 0 18px 36px rgba(64, 92, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  box-shadow: 0 10px 24px rgba(64, 92, 255, 0.08);
   cursor: pointer;
   transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
 .assert-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 22px 44px rgba(64, 92, 255, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 28px rgba(64, 92, 255, 0.11);
 }
 
 .assert-card.expanded {

@@ -1229,19 +1229,17 @@ function ProfileTab({
 }
 
 function DisciplineHome({
-  allGoals,
   myGoals,
   statuses,
   friendCount,
-  loadingGoals,
   onStart,
+  onViewAsserts,
 }: {
-  allGoals?: CreatedArgs[];
   myGoals: CreatedArgs[];
   statuses: (GoalStruct | undefined)[];
   friendCount: number;
-  loadingGoals: boolean;
   onStart: () => void;
+  onViewAsserts: () => void;
 }) {
   const livePairs = myGoals
     .map((g, i) => ({ g, st: statuses[i]?.[6] }))
@@ -1264,65 +1262,33 @@ function DisciplineHome({
       </section>
 
       <div className="on-line-strip" aria-label="what's on the line">
-        <b>{ethAtRisk ? `${ethAtRisk.toFixed(3).replace(/\.?0+$/, '')} ETH` : '0 ETH'}</b> on the line
-        <span>·</span>
-        <b>{active}</b> active
-        <span>·</span>
-        <b>{friendCount || '0'}</b> friend{friendCount === 1 ? '' : 's'} watching
+        <span className="line-stat"><b>{ethAtRisk ? `${ethAtRisk.toFixed(3).replace(/\.?0+$/, '')} ETH` : '0 ETH'}</b> on the line</span>
+        <span className="line-stat"><b>{active}</b> active</span>
+        <span className="line-stat"><b>{friendCount || '0'}</b> friend{friendCount === 1 ? '' : 's'} watching</span>
       </div>
 
-      <section className="active-carousel">
-        <div className="section-head clean">
-          <h2 className="section-title">active asserts</h2>
-          <span className="section-sub muted">what’s currently at risk</span>
-        </div>
-        {livePairs.length ? (
+      {livePairs.length ? (
+        <section className="active-carousel">
+          <div className="section-head clean">
+            <h2 className="section-title">active asserts</h2>
+            <button className="tiny-link" type="button" onClick={onViewAsserts}>view all</button>
+          </div>
           <div className="active-scroll">
             {livePairs.map(({ g, st }) => (
               <AssertCard key={g.id.toString()} goal={g} status={st === 0 ? 'Pending' : 'Live'} />
             ))}
           </div>
-        ) : (
-          <p className="empty-copy">nothing live yet. start one and send it to a friend.</p>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="social-feed-section">
-        <div className="section-head clean">
-          <h2 className="section-title">recent activity</h2>
-        </div>
-        {feed.length ? (
-          <SocialFeed rows={feed.slice(0, 4)} />
-        ) : (
-          <p className="empty-copy">no activity yet.</p>
-        )}
-      </section>
-
-      <section className="app-panel your-panel social-panel">
-        <div className="section-head">
-          <h2 className="section-title">your asserts</h2>
-          <span className="section-sub muted">your current promises</span>
-        </div>
-        {loadingGoals ? (
-          <p className="muted">loading asserts…</p>
-        ) : myGoals.length ? (
-          <div className="goal-grid compact">
-            {myGoals.map((g) => (
-              <GoalCard key={g.id.toString()} id={g.id.toString()} />
-            ))}
+      {feed.length ? (
+        <section className="social-feed-section">
+          <div className="section-head clean">
+            <h2 className="section-title">recent activity</h2>
           </div>
-        ) : (
-          <p className="empty-copy">no active asserts yet. start one and send it to a friend.</p>
-        )}
-      </section>
-
-      <section className="app-panel top-panel social-panel">
-        <div className="section-head">
-          <h2 className="section-title">top asserts</h2>
-          <span className="section-sub muted">people putting money where their mouth is</span>
-        </div>
-        <TopAsserts goals={allGoals} limit={6} seeded />
-      </section>
+          <SocialFeed rows={feed.slice(0, 4)} />
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -1514,42 +1480,6 @@ function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
           <span className="muted">locked in — waiting on deadline</span>
         )}
       </div>
-    </div>
-  );
-}
-
-/* ---------------- feed / leaderboard ---------------- */
-
-function TopAssertRow({ goal, rank, seeded }: { goal: CreatedArgs; rank: number; seeded: boolean }) {
-  const cd = useCountdown(goal.deadline);
-  return (
-    <div className={`feed-row ${rank < 3 ? `rank rank-${rank + 1}` : ''} fade-up-1`}>
-      <span className={`feed-rank${rank < 3 ? ' top' : ''}`}>
-        {['🥇', '🥈', '🥉'][rank] ?? `#${rank + 1}`}
-      </span>
-      <div className="feed-main">
-        <div className="feed-goal">{goal.goalText}</div>
-        <div className="feed-meta">
-          {seeded ? 'someone on base' : short(goal.creator)} → vs {seeded ? 'their referee' : short(goal.referee)}
-        </div>
-      </div>
-      <div className="feed-stats">
-        <span className="feed-amount">{fmt(goal.amount)} ETH</span>
-        <span className={`feed-countdown${cd.urgent && !cd.expired ? ' urgent' : ''}`}>
-          {cd.expired ? 'done' : cd.out}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function TopAsserts({ goals, limit = 8, seeded = false }: { goals?: CreatedArgs[]; limit?: number; seeded?: boolean }) {
-  const src = goals ?? [];
-  const sorted = useMemo(() => [...src].sort((a, b) => (a.amount < b.amount ? 1 : -1)), [src]);
-  const rows = sorted.slice(0, limit);
-  return (
-    <div className="feed-list">
-      {rows.map((g, i) => <TopAssertRow key={g.id.toString()} goal={g} rank={i} seeded={seeded && !goals?.length} />)}
     </div>
   );
 }
@@ -1834,7 +1764,7 @@ export default function App() {
   const [profiles, setProfiles] = useState<Record<string, UserProfile>>(readProfiles);
   const [draftReferee, setDraftReferee] = useState<string | undefined>();
   const onKnownChain = chainId === 8453 || chainId === 84532;
-  const { data: allGoals, isLoading: loadingGoals } = useAllCreated();
+  const { data: allGoals } = useAllCreated();
   const profile = address ? profiles[address] ?? defaultProfile(address) : defaultProfile();
   const saveProfile = (nextProfile: UserProfile) => {
     if (!address) return;
@@ -1999,12 +1929,11 @@ export default function App() {
             <ProfileTab key={address} myGoals={myGoals} profile={profile} address={address} onSave={saveProfile} />
           ) : (
             <DisciplineHome
-              allGoals={allGoals}
               myGoals={myGoals}
               statuses={myStatuses}
               friendCount={contacts.length}
-              loadingGoals={loadingGoals}
               onStart={() => startBuilder()}
+              onViewAsserts={() => selectMode('asserts')}
             />
           )}
           {inviteId ? (
