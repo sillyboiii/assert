@@ -3804,6 +3804,21 @@ footer a {
 }
 
 @media (max-width: 420px) {
+  .active-carousel {
+    padding: 14px 12px;
+    border-radius: 22px;
+  }
+
+  .active-scroll {
+    grid-auto-columns: minmax(0, 100%);
+    gap: 10px;
+    padding: 12px 0 2px;
+  }
+
+  .active-scroll .assert-card {
+    scroll-snap-align: start;
+  }
+
   .bottom-nav {
     width: calc(100vw - 16px);
     grid-template-columns: 1fr 1fr 56px 1fr 1fr;
@@ -3830,6 +3845,16 @@ footer a {
   .assert-card {
     padding: 16px;
     border-radius: 22px;
+    min-height: 0;
+  }
+
+  .assert-card h3 {
+    font-size: clamp(23px, 7.6vw, 30px);
+    line-height: 1.02;
+  }
+
+  .assert-card .assert-pass-top {
+    gap: 8px;
   }
 
   .assert-card .assert-human-row {
