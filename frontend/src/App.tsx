@@ -1455,7 +1455,7 @@ function ShareInvite({ id, referee, onClose }: { id: bigint; referee: string; on
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
-          <h2>locked in 🎯</h2>
+          <h2><b>LOCKED IN</b></h2>
           <button className="modal-close" onClick={onClose} aria-label="close">×</button>
         </div>
         <p className="modal-sub muted">
