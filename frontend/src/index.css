@@ -3242,12 +3242,17 @@ select:focus {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 16px;
-  flex: none;
   color: var(--indigo);
 }
 
-.feed-countdown {
+.feed-stats {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.feed-countdown {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 13px;
@@ -3260,6 +3265,46 @@ select:focus {
 .feed-countdown.urgent {
   color: var(--amber);
   animation: pulse 1.4s ease-in-out infinite;
+}
+
+@media (max-width: 520px) {
+  .top-panel .feed-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 11px;
+    padding: 15px;
+  }
+
+  .top-panel .feed-main {
+    display: grid;
+    gap: 4px;
+  }
+
+  .top-panel .feed-goal {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.05;
+  }
+
+  .top-panel .feed-stats {
+    width: calc(100% - 43px);
+    margin-left: 43px;
+    margin-top: 8px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .top-panel .feed-amount,
+  .top-panel .feed-countdown {
+    min-width: 0;
+    padding: 6px 9px;
+    border-radius: 999px;
+    background: #f1f4ff;
+    font-size: 12px;
+    line-height: 1;
+    text-align: left;
+  }
 }
 
 /* ---------- steps ---------- */

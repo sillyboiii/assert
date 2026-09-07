@@ -1492,10 +1492,12 @@ function TopAssertRow({ goal, rank, seeded }: { goal: CreatedArgs; rank: number;
           {seeded ? 'someone on base' : short(goal.creator)} → vs {seeded ? 'their referee' : short(goal.referee)}
         </div>
       </div>
-      <span className="feed-amount">{fmt(goal.amount)} ETH</span>
-      <span className={`feed-countdown${cd.urgent && !cd.expired ? ' urgent' : ''}`}>
-        {cd.expired ? 'done' : cd.out}
-      </span>
+      <div className="feed-stats">
+        <span className="feed-amount">{fmt(goal.amount)} ETH</span>
+        <span className={`feed-countdown${cd.urgent && !cd.expired ? ' urgent' : ''}`}>
+          {cd.expired ? 'done' : cd.out}
+        </span>
+      </div>
     </div>
   );
 }
