@@ -15,6 +15,12 @@ import {
 import { commitmentAbi } from './Commitment.abi.ts';
 import { COMMITMENT_ADDRESS, STATUS_LABEL } from './lib/wagmi.ts';
 import { waitForTx } from './lib/tx.ts';
+import {
+  readStoredPreferences,
+  readStoredProfile,
+  saveStoredPreferences,
+  saveStoredProfile,
+} from './lib/supabase.ts';
 
 type GoalStruct = [
   creator: `0x${string}`,
@@ -65,6 +71,14 @@ function readProfiles() {
     return JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) ?? '{}') as Record<string, UserProfile>;
   } catch {
     return {};
+  }
+}
+
+function readStringList(key: string) {
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? '[]') as string[];
+  } catch {
+    return [];
   }
 }
 
@@ -968,11 +982,11 @@ function FriendsTab({
   const hiddenFriendKey = address ? `assert-hidden-friends:${address.toLowerCase()}` : '';
   const [dismissed, setDismissed] = useState<string[]>(() => {
     if (!address) return [];
-    try { return JSON.parse(localStorage.getItem(dismissKey) ?? '[]'); } catch { return []; }
+    return readStringList(dismissKey);
   });
   const [hiddenFriends, setHiddenFriends] = useState<string[]>(() => {
     if (!address) return [];
-    try { return JSON.parse(localStorage.getItem(hiddenFriendKey) ?? '[]'); } catch { return []; }
+    return readStringList(hiddenFriendKey);
   });
   const [openFriend, setOpenFriend] = useState<string | null>(null);
   const visibleRequests = requests.filter((r) => !dismissed.includes(r.id.toString()));
@@ -985,17 +999,51 @@ function FriendsTab({
     await waitForTx(h);
     window.location.reload();
   };
+  const persistPreferences = (nextDismissed: string[], nextHiddenFriends: string[]) => {
+    if (!address) return;
+    localStorage.setItem(dismissKey, JSON.stringify(nextDismissed));
+    localStorage.setItem(hiddenFriendKey, JSON.stringify(nextHiddenFriends));
+    saveStoredPreferences({
+      wallet_address: address,
+      dismissed_request_ids: nextDismissed,
+      hidden_friend_addresses: nextHiddenFriends,
+    }).catch((error) => console.warn('Supabase preferences save failed', error));
+  };
   const dismiss = (id: bigint) => {
     const next = [...dismissed, id.toString()];
     setDismissed(next);
-    if (address) localStorage.setItem(dismissKey, JSON.stringify(next));
+    persistPreferences(next, hiddenFriends);
   };
   const unfriend = (friendAddress: `0x${string}`) => {
     const next = [...hiddenFriends, friendAddress.toLowerCase()];
     setHiddenFriends(next);
     setOpenFriend(null);
-    if (address) localStorage.setItem(hiddenFriendKey, JSON.stringify(next));
+    persistPreferences(dismissed, next);
   };
+  useEffect(() => {
+    if (!address) return;
+    const localDismissed = readStringList(dismissKey);
+    const localHiddenFriends = readStringList(hiddenFriendKey);
+    setDismissed(localDismissed);
+    setHiddenFriends(localHiddenFriends);
+    let cancelled = false;
+    readStoredPreferences(address)
+      .then((stored) => {
+        if (!stored || cancelled) return;
+        const nextDismissed = [...new Set([...localDismissed, ...stored.dismissed_request_ids])];
+        const nextHiddenFriends = [
+          ...new Set([...localHiddenFriends, ...stored.hidden_friend_addresses.map((a) => a.toLowerCase())]),
+        ];
+        setDismissed(nextDismissed);
+        setHiddenFriends(nextHiddenFriends);
+        localStorage.setItem(dismissKey, JSON.stringify(nextDismissed));
+        localStorage.setItem(hiddenFriendKey, JSON.stringify(nextHiddenFriends));
+      })
+      .catch((error) => console.warn('Supabase preferences load failed', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [address, dismissKey, hiddenFriendKey]);
   return (
     <div className="social-app fade-up">
       <section className="tab-shell">
@@ -1800,7 +1848,36 @@ export default function App() {
     const nextProfiles = { ...profiles, [address]: nextProfile };
     setProfiles(nextProfiles);
     localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextProfiles));
+    saveStoredProfile({
+      wallet_address: address,
+      username: nextProfile.username,
+      pfp_url: nextProfile.pfpUrl,
+      locked: nextProfile.locked,
+    }).catch((error) => console.warn('Supabase profile save failed', error));
   };
+
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    readStoredProfile(address)
+      .then((stored) => {
+        if (!stored || cancelled) return;
+        const nextProfile = {
+          username: stored.username || short(address, 3),
+          pfpUrl: stored.pfp_url,
+          locked: stored.locked,
+        };
+        setProfiles((current) => {
+          const nextProfiles = { ...current, [address]: nextProfile };
+          localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextProfiles));
+          return nextProfiles;
+        });
+      })
+      .catch((error) => console.warn('Supabase profile load failed', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
 
   useEffect(() => {
     if (appMode === 'intro') return;
