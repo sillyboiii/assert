@@ -1661,6 +1661,7 @@ const LEGAL: Record<'terms' | 'privacy', { eyebrow: string; title: string; updat
         paras: [
           'When you assert a goal, your stake is locked onchain and is not refundable. If you hit your commitment your stake and your referee\'s stake are returned. If you miss, the pot is paid out as the rules you agreed to when you created the commitment.',
           'Transactions on Base cannot be reversed. Double-check every goal, amount, deadline and referee before you sign — there are no takebacks, by design.',
+          'The app is currently deployed to the Base testnet (Base Sepolia) for production testing. Stakes you place there are test assets with no monetary value and can be refilled freely. If we move the app to a production network, stakes will carry real value and the same no-takebacks rule will apply.',
         ],
       },
       {
@@ -1691,7 +1692,7 @@ const LEGAL: Record<'terms' | 'privacy', { eyebrow: string; title: string; updat
       {
         heading: '8. talk to us',
         paras: [
-          'Questions about these terms? Reach us through the site at assert-three.vercel.app.',
+          'Questions about these terms? Reach us through the site at https://useassert.app.',
         ],
       },
     ],
@@ -1710,7 +1711,8 @@ const LEGAL: Record<'terms' | 'privacy', { eyebrow: string; title: string; updat
       {
         heading: '2. what we do collect',
         paras: [
-          'Your wallet address (so the app can show you your commitments and profile), a username and optional profile picture that you choose and that we store only in your browser\'s local storage, and onchain data — goals, stakes and referee decisions — which is public by the nature of blockchain.',
+          'Your wallet address (so the app can show you your commitments and profile), a username and optional profile picture you choose, your dismissed-request and hidden-friend preferences, and onchain data — goals, stakes and referee decisions — which is public by the nature of blockchain.',
+          'When you\'re connected, your profile and preferences are synced over HTTPS to a hosted database (our Supabase project) keyed by your wallet address so they follow you across devices. A copy also lives in your browser\'s local storage.',
         ],
       },
       {
@@ -1732,9 +1734,11 @@ const LEGAL: Record<'terms' | 'privacy', { eyebrow: string; title: string; updat
         ],
       },
       {
-        heading: '6. your local data is yours',
+        heading: '6. where your profile lives',
         paras: [
-          'Your profile stays in your browser\'s local storage on this device. Clearing your browser data removes it; it is never copied to our servers.',
+          'Your profile and preferences are stored both in your browser\'s local storage and, when you\'re connected, in a hosted database keyed by your wallet address so your name, avatar, dismissed requests and hidden friends follow you across devices.',
+          'Clearing your browser\'s site data removes the local copy. The hosted copy is keyed to your wallet; if you want it gone, delete the row for your address in the database or contact us.',
+          'Note: the hosted copy is served over the internet for sync purposes, so treat your username and avatar as semi-public — don\'t store anything sensitive there. Only what you put onchain is broadcast to other users.',
         ],
       },
       {
@@ -1746,7 +1750,7 @@ const LEGAL: Record<'terms' | 'privacy', { eyebrow: string; title: string; updat
       {
         heading: '8. changes & contact',
         paras: [
-          'We may update this policy from time to time; the date above reflects the latest version. Questions? Reach us through the site at assert-three.vercel.app.',
+          'We may update this policy from time to time; the date above reflects the latest version. Questions? Reach us through the site at https://useassert.app.',
         ],
       },
     ],
