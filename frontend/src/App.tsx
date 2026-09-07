@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, getAbiItem, getAddress, http, parseUnits, formatEther } from 'viem';
 import { base, baseSepolia, mainnet } from 'viem/chains';
@@ -650,10 +650,29 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
           ? proof.trim().length > 0
           : true;
 
+  const submittingRef = useRef(false);
+
   const submit = async () => {
-    if (submitting) return;
+    if (submittingRef.current) return;
     setError('');
     setSubmitting(true);
+    submittingRef.current = true;
+    const confirmCreated = async (before: bigint): Promise<bigint | null> => {
+      for (let i = 0; i < 15; i++) {
+        try {
+          const now = (await publicClient!.readContract({
+            address: COMMITMENT_ADDRESS,
+            abi: commitmentAbi,
+            functionName: 'nextId',
+          })) as bigint;
+          if (now > before) return now - 1n;
+        } catch {
+          /* transient rpc — keep polling */
+        }
+        await new Promise((r) => setTimeout(r, 1300));
+      }
+      return null;
+    };
     try {
       if (chainId !== base.id && chainId !== baseSepolia.id) {
         setError('switch your wallet to base before creating.');
@@ -677,16 +696,53 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
         return;
       }
       const deadline = BigInt(Math.floor(Date.now() / 1000) + days * 86400);
-      const gh = await writeContractAsync({
-        address: COMMITMENT_ADDRESS,
-        abi: commitmentAbi,
-        functionName: 'createGoal',
-        args: [goalText, refereeResult.addr!, deadline],
-        value: parseUnits(stake, 18),
-      });
+      let before = 0n;
+      try {
+        before = (await publicClient!.readContract({
+          address: COMMITMENT_ADDRESS,
+          abi: commitmentAbi,
+          functionName: 'nextId',
+        })) as bigint;
+      } catch {
+        /* ignore */
+      }
+
+      let gh: `0x${string}` | undefined;
+      try {
+        gh = await writeContractAsync({
+          address: COMMITMENT_ADDRESS,
+          abi: commitmentAbi,
+          functionName: 'createGoal',
+          args: [goalText, refereeResult.addr!, deadline],
+          value: parseUnits(stake, 18),
+        });
+      } catch (e: any) {
+        // the tx may have landed anyway (stale wallet prompt / broadcast race) —
+        // confirm onchain before blaming the user
+        const landed = await confirmCreated(before);
+        if (landed !== null) {
+          onCreated(landed);
+          return;
+        }
+        const code = e?.cause?.code ?? e?.code;
+        const base =
+          code === 4001
+            ? 'you rejected the transaction in your wallet.'
+            : e?.shortMessage?.includes('reverted') || e?.cause?.data
+              ? 'the contract rejected this — check your stake, referee and deadline.'
+              : e?.shortMessage ?? e?.message ?? 'transaction failed';
+        setError(`${base}${code ? ` (code ${code})` : ''}`);
+        return;
+      }
+
       setTxHash(gh);
-      await waitForTx(gh);
-      // find the newly created goal id for the share link
+      try {
+        await waitForTx(gh);
+      } catch {
+        /* receipt wait can time out even when the tx already mined — confirm below */
+      }
+
+      // pin the created id from the event log
       try {
         const receipt = await publicClient!.getTransactionReceipt({ hash: gh });
         const ev = getAbiItem({ abi: commitmentAbi, name: 'Created' });
@@ -705,18 +761,11 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
       } catch {
         /* non-fatal */
       }
-      onCreated(0n);
-    } catch (e: any) {
-      const code = e?.cause?.code ?? e?.code;
-      const base =
-        code === 4001
-          ? 'you rejected the transaction in your wallet.'
-          : e?.shortMessage?.includes('reverted') || e?.cause?.data
-            ? 'the contract rejected this — check your stake, referee and deadline.'
-            : e?.shortMessage ?? e?.message ?? 'transaction failed';
-      setError(`${base}${code ? ` (code ${code})` : ''}`);
+      const createdId = await confirmCreated(before);
+      onCreated(createdId ?? 0n);
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
@@ -774,8 +823,8 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
         </p>
       )}
       {txHash && !isPending && (
-        <p className="muted" style={{ fontSize: 13 }}>
-          tx {short(txHash, 6)} confirmed — finding your new assert…
+        <p className="muted" style={{ color: 'var(--green)', fontSize: 13 }}>
+          ✓ locked in onchain
         </p>
       )}
 
