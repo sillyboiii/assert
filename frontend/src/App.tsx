@@ -1195,11 +1195,11 @@ function DisciplineHome({
   loadingGoals: boolean;
   onStart: () => void;
 }) {
-  const active = myGoals.filter((g) => Number(g.deadline) * 1000 > Date.now()).length;
-  const ethAtRisk = myGoals.reduce((sum, g) => sum + Number(formatEther(g.amount)), 0);
   const livePairs = myGoals
     .map((g, i) => ({ g, st: statuses[i]?.[6] }))
     .filter(({ st }) => st === 0 || st === 1);
+  const active = livePairs.length;
+  const ethAtRisk = livePairs.reduce((sum, { g }) => sum + Number(formatEther(g.amount)), 0);
   const feed = activityFromGoals(myGoals, statuses);
   return (
     <div className="social-app fade-up">
