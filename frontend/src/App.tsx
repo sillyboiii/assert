@@ -831,6 +831,12 @@ type SocialFeedItem = {
   id?: string;
 };
 
+function splitGoalText(text: string): { title: string; description?: string } {
+  const idx = text.indexOf('\n\n');
+  if (idx === -1) return { title: text.trim() };
+  return { title: text.slice(0, idx).trim(), description: text.slice(idx + 2).trim() };
+}
+
 function activityFromGoals(
   myGoals: CreatedArgs[],
   statuses: (GoalStruct | undefined)[],
@@ -849,7 +855,7 @@ function activityFromGoals(
           : st === 4
             ? 'refunded to you'
             : undefined;
-    return { who: 'you', action, body: g.goalText, meta, badge, reaction: '0', result, id: g.id.toString() };
+    return { who: 'you', action, body: splitGoalText(g.goalText).title, meta, badge, reaction: '0', result, id: g.id.toString() };
   });
 }
 
@@ -925,7 +931,7 @@ function HomeAssertCard({ goal, status }: { goal: CreatedArgs; status: number })
         <span className={`live-pill ${label.toLowerCase()}`}>{label}</span>
         <b>{fmt(goal.amount)} ETH</b>
       </div>
-      <h3>{goal.goalText}</h3>
+      <h3>{splitGoalText(goal.goalText).title}</h3>
       <div className="home-assert-state">
         <ClockIcon />
         <div>
@@ -1403,7 +1409,7 @@ function ShareInvite({ id, referee, onClose }: { id: bigint; referee: string; on
 
 /* ---------------- goal card ---------------- */
 
-function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
+function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focused?: boolean }) {
   const { address } = useAccount();
   const { writeContractAsync, isPending } = useWriteContract();
   const { data } = useReadContract({
@@ -1433,6 +1439,7 @@ function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
   const isCreator = address === creator;
   const isReferee = address === referee;
   const refund = amount - feeAmount;
+  const { title, description } = splitGoalText(goalText);
 
   const run = async (functionName: 'acceptRole' | 'approve' | 'cancel' | 'claimReferee') => {
     const hash = await writeContractAsync({
@@ -1451,7 +1458,9 @@ function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
         <span className={`status s${status}`}>{STATUS_LABEL[status]}</span>
         <b>{fmt(amount)} ETH</b>
       </div>
-      <p className="goal-text">{goalText}</p>
+      <p className="goal-text">{title}</p>
+      {focused && description ? <p className="goal-desc">{description}</p> : null}
+      {!focused ? <a className="goal-open" href={`#g/${id}`}>view assert →</a> : null}
       <div className="home-assert-state">
         <ClockIcon />
         <div>
@@ -1965,7 +1974,7 @@ export default function App() {
       ) : (
         <main>
           {invited ? (
-            <GoalCard id={invited} />
+            <GoalCard id={invited} focused />
           ) : null}
 
           {invited ? null : appMode === 'intro' ? (

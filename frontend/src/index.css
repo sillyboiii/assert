@@ -3207,6 +3207,25 @@ select:focus {
   color: var(--indigo);
 }
 
+.assert-detail-card .goal-desc {
+  margin: 0;
+  padding: 12px 0 2px;
+  border-top: 1px solid rgba(64, 92, 255, 0.12);
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.goal-open {
+  justify-self: start;
+  color: var(--blue-deep);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
 .goal-meta {
   position: relative;
   z-index: 1;
