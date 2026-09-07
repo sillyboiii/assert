@@ -1134,7 +1134,14 @@ main {
 
 .friend-search {
   width: 100%;
-  margin-bottom: 14px;
+}
+
+.friend-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 14px;
 }
 
 .friend-card {
@@ -1142,6 +1149,10 @@ main {
   grid-template-columns: 56px minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 13px 0;
 }
 
 .friend-card .mini-avatar {
@@ -1161,8 +1172,37 @@ main {
 
 .friend-card-wrap .friend-card:hover {
   transform: translateY(-1px);
-  border-color: rgba(64, 92, 255, 0.18);
-  box-shadow: 0 12px 28px rgba(64, 92, 255, 0.08);
+  box-shadow: none;
+}
+
+.friend-card-wrap + .friend-card-wrap {
+  border-top: 1px solid rgba(17, 20, 61, 0.08);
+}
+
+.friend-list .friend-card h3 {
+  margin: 0 0 4px;
+}
+
+.friends-empty {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 18px 0;
+}
+
+.friends-empty h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  text-transform: lowercase;
+}
+
+.friends-empty p {
+  margin: 0 0 6px;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .friend-bubble {
@@ -1583,6 +1623,46 @@ img.profile-avatar {
 
 .active-scroll::-webkit-scrollbar {
   display: none;
+}
+
+.home-assert-card {
+  display: grid;
+  gap: 13px;
+  padding: 18px;
+  border: 1px solid rgba(64, 92, 255, 0.12);
+  border-radius: var(--radius-card);
+  background: #f6f8ff;
+  box-shadow: 0 10px 24px rgba(64, 92, 255, 0.08);
+}
+
+.home-assert-card h3 {
+  margin: 2px 0;
+  font-family: var(--font-display);
+  font-size: clamp(31px, 8vw, 42px);
+  line-height: 0.96;
+  letter-spacing: -0.04em;
+  text-transform: lowercase;
+}
+
+.home-assert-card p {
+  margin: 0;
+  max-width: 460px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.home-assert-action {
+  width: 100%;
+  display: inline-flex;
+  justify-content: center;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: rgba(64, 92, 255, 0.08);
+  color: var(--blue-deep);
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
 }
 
 .active-mini-card {

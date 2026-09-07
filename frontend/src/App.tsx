@@ -905,34 +905,24 @@ type AssertFilter = 'Live' | 'Pending' | 'Won' | 'Bailed';
 
 const FILTERS: AssertFilter[] = ['Live', 'Pending', 'Won', 'Bailed'];
 
-function AssertCard({ goal, status = 'Live' }: { goal: CreatedArgs; status?: AssertFilter }) {
+function HomeAssertCard({ goal, status }: { goal: CreatedArgs; status: number }) {
   const cd = useCountdown(goal.deadline);
   const refereeName = short(goal.referee, 4);
-  const [open, setOpen] = useState(false);
+  const label = status === 0 ? 'Pending' : 'Live';
   return (
-    <button
-      className={`assert-card${open ? ' expanded' : ''}`}
-      aria-expanded={open}
-      onClick={() => setOpen((o) => !o)}
-    >
+    <article className="home-assert-card">
       <div className="assert-pass-top">
-        <span className={`live-pill ${status.toLowerCase()}`}>{status}</span>
+        <span className={`live-pill ${label.toLowerCase()}`}>{label}</span>
         <b>{fmt(goal.amount)} ETH</b>
       </div>
       <h3>{goal.goalText}</h3>
-      <div className="assert-human-row">
-        <span><MiniAvatar name={refereeName} />{refereeName} · referee</span>
-        <span className={cd.urgent && !cd.expired ? 'time-left urgent' : 'time-left'}>{cd.expired ? 'done' : `${cd.out} left`}</span>
-      </div>
-      {open ? (
-        <div className="assert-details">
-          <div className="assert-risk-strip">
-            <span>Bail → {refereeName} gets {fmt(goal.amount)} ETH</span>
-          </div>
-        </div>
-      ) : null}
-      <span className="assert-toggle">{open ? 'show less' : 'show more'}<i>{open ? '↑' : '↓'}</i></span>
-    </button>
+      {status === 0 ? (
+        <p>Waiting on your friend. Your assert goes live once they accept.</p>
+      ) : (
+        <p>{refereeName} is watching · {cd.expired ? 'done' : `${cd.out} left`}</p>
+      )}
+      <a href={`#g/${goal.id.toString()}`} className="home-assert-action">View assert →</a>
+    </article>
   );
 }
 
@@ -969,6 +959,8 @@ function FriendsTab({
   address,
   onStart,
   feed,
+  myGoals,
+  statuses,
 }: {
   requests: CreatedArgs[];
   contacts: `0x${string}`[];
@@ -976,6 +968,8 @@ function FriendsTab({
   address?: `0x${string}`;
   onStart: (friend?: Friend) => void;
   feed: SocialFeedItem[];
+  myGoals: CreatedArgs[];
+  statuses: (GoalStruct | undefined)[];
 }) {
   const { writeContractAsync, isPending } = useWriteContract();
   const dismissKey = address ? `assert-dismiss-referee:${address.toLowerCase()}` : '';
@@ -1019,6 +1013,15 @@ function FriendsTab({
     setHiddenFriends(next);
     setOpenFriend(null);
     persistPreferences(dismissed, next);
+  };
+  const friendDetail = (friendAddress: `0x${string}`) => {
+    const together = myGoals.filter((g) => g.creator === friendAddress || g.referee === friendAddress);
+    const openEth = together.reduce((sum, g) => {
+      const status = statuses[myGoals.indexOf(g)]?.[6];
+      return status === 0 || status === 1 ? sum + Number(formatEther(g.amount)) : sum;
+    }, 0);
+    const assertCopy = `${together.length} assert${together.length === 1 ? '' : 's'} together`;
+    return openEth ? `${assertCopy} · ${openEth.toFixed(3).replace(/\.?0+$/, '')} ETH on the line` : assertCopy;
   };
   useEffect(() => {
     if (!address) return;
@@ -1075,10 +1078,11 @@ function FriendsTab({
               </div>
             ))}
           </div>
-        ) : (
-          <p className="empty-copy" style={{ marginTop: 0 }}>no pending referee requests.</p>
-        )}
-        <input className="friend-search" placeholder="search contacts" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        ) : null}
+        <div className="friend-toolbar">
+          <input className="friend-search" placeholder="search friends" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <button type="button" className="small-blue" onClick={() => onStart()}>+ add friend</button>
+        </div>
         <div className="friend-list">
           {filteredContacts.length ? (
             filteredContacts.map((a) => {
@@ -1101,9 +1105,9 @@ function FriendsTab({
                     <MiniAvatar name={f.name} src={f.pfp} />
                     <div>
                       <h3>{f.name}</h3>
-                      <p>{f.detail}</p>
+                      <p>{friendDetail(a)}</p>
                     </div>
-                    <div className="friend-meta"><b>{f.role}</b></div>
+                    <div className="friend-meta"><b>→</b></div>
                   </button>
                   {openFriend === a ? (
                     <div className="friend-bubble" role="menu">
@@ -1119,20 +1123,22 @@ function FriendsTab({
               );
             })
           ) : (
-            <p className="empty-copy" style={{ marginTop: 0 }}>no contacts yet — create an assert with a friend to get started.</p>
+            <div className="friends-empty">
+              <h3>your circle is empty.</h3>
+              <p>add someone you trust, then put something on the line.</p>
+              <button type="button" className="small-blue" onClick={() => onStart()}>+ add a friend</button>
+            </div>
           )}
         </div>
       </section>
-      <section className="social-feed-section">
-        <div className="section-head clean">
-          <h2 className="section-title">recent activity</h2>
-        </div>
-        {feed.length ? (
+      {feed.length ? (
+        <section className="social-feed-section">
+          <div className="section-head clean">
+            <h2 className="section-title">recent activity</h2>
+          </div>
           <SocialFeed rows={feed.slice(0, 4)} />
-        ) : (
-          <p className="empty-copy">no activity yet.</p>
-        )}
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -1234,16 +1240,21 @@ function DisciplineHome({
   friendCount,
   onStart,
   onViewAsserts,
+  onViewActivity,
 }: {
   myGoals: CreatedArgs[];
   statuses: (GoalStruct | undefined)[];
   friendCount: number;
   onStart: () => void;
   onViewAsserts: () => void;
+  onViewActivity: () => void;
 }) {
   const livePairs = myGoals
     .map((g, i) => ({ g, st: statuses[i]?.[6] }))
     .filter(({ st }) => st === 0 || st === 1);
+  const featured = livePairs
+    .slice()
+    .sort((a, b) => Number(a.g.deadline - b.g.deadline))[0];
   const active = livePairs.length;
   const ethAtRisk = livePairs.reduce((sum, { g }) => sum + Number(formatEther(g.amount)), 0);
   const feed = activityFromGoals(myGoals, statuses);
@@ -1267,17 +1278,13 @@ function DisciplineHome({
         <span className="line-stat"><b>{friendCount || '0'}</b> friend{friendCount === 1 ? '' : 's'} watching</span>
       </div>
 
-      {livePairs.length ? (
+      {featured ? (
         <section className="active-carousel">
           <div className="section-head clean">
             <h2 className="section-title">active asserts</h2>
             <button className="tiny-link" type="button" onClick={onViewAsserts}>view all</button>
           </div>
-          <div className="active-scroll">
-            {livePairs.map(({ g, st }) => (
-              <AssertCard key={g.id.toString()} goal={g} status={st === 0 ? 'Pending' : 'Live'} />
-            ))}
-          </div>
+          <HomeAssertCard goal={featured.g} status={featured.st ?? 0} />
         </section>
       ) : null}
 
@@ -1285,6 +1292,7 @@ function DisciplineHome({
         <section className="social-feed-section">
           <div className="section-head clean">
             <h2 className="section-title">recent activity</h2>
+            <button className="tiny-link" type="button" onClick={onViewActivity}>see all →</button>
           </div>
           <SocialFeed rows={feed.slice(0, 4)} />
         </section>
@@ -1924,7 +1932,16 @@ export default function App() {
           ) : appMode === 'asserts' ? (
             <AssertsTab myGoals={myGoals} />
           ) : appMode === 'friends' ? (
-            <FriendsTab requests={refereeRequests} contacts={contacts} profiles={profiles} address={address} onStart={startBuilder} feed={feed} />
+            <FriendsTab
+              requests={refereeRequests}
+              contacts={contacts}
+              profiles={profiles}
+              address={address}
+              onStart={startBuilder}
+              feed={feed}
+              myGoals={myGoals}
+              statuses={myStatuses}
+            />
           ) : appMode === 'you' ? (
             <ProfileTab key={address} myGoals={myGoals} profile={profile} address={address} onSave={saveProfile} />
           ) : (
@@ -1934,6 +1951,7 @@ export default function App() {
               friendCount={contacts.length}
               onStart={() => startBuilder()}
               onViewAsserts={() => selectMode('asserts')}
+              onViewActivity={() => selectMode('friends')}
             />
           )}
           {inviteId ? (
