@@ -905,22 +905,45 @@ type AssertFilter = 'Live' | 'Pending' | 'Won' | 'Bailed';
 
 const FILTERS: AssertFilter[] = ['Live', 'Pending', 'Won', 'Bailed'];
 
+function ClockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
 function HomeAssertCard({ goal, status }: { goal: CreatedArgs; status: number }) {
   const cd = useCountdown(goal.deadline);
   const refereeName = short(goal.referee, 4);
   const label = status === 0 ? 'Pending' : 'Live';
+  const live = status === 1;
   return (
-    <article className="home-assert-card">
+    <article className={`home-assert-card${live ? ' live' : ''}`}>
       <div className="assert-pass-top">
         <span className={`live-pill ${label.toLowerCase()}`}>{label}</span>
         <b>{fmt(goal.amount)} ETH</b>
       </div>
       <h3>{goal.goalText}</h3>
-      {status === 0 ? (
-        <p>Waiting on your friend. Your assert goes live once they accept.</p>
-      ) : (
-        <p>{refereeName} is watching · {cd.expired ? 'done' : `${cd.out} left`}</p>
-      )}
+      <div className="home-assert-state">
+        <ClockIcon />
+        <div>
+          {live ? (
+            <>
+              <span className="state-line">{refereeName} is watching</span>
+              <span className="state-sub">
+                {cd.expired ? 'time is up' : `${cd.out} left`} · {refereeName} takes {fmt(goal.amount)} ETH if you bail
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="state-line">Waiting on your friend.</span>
+              <span className="state-sub">Your assert goes live once they accept.</span>
+            </>
+          )}
+        </div>
+      </div>
       <a href={`#g/${goal.id.toString()}`} className="home-assert-action">View assert →</a>
     </article>
   );
@@ -1263,7 +1286,6 @@ function DisciplineHome({
       <section className="home-hero-card">
         <div>
           <img className="home-card-wordmark" src="/wordmark.png" alt="Assert" />
-          <span className="eyebrow">home</span>
           <h2>{active ? `${active} assert${active === 1 ? '' : 's'} on the line.` : 'nothing on the line yet.'}</h2>
           <p>
             make one promise, put something behind it, and bring a friend in so it actually counts.

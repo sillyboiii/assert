@@ -1627,41 +1627,92 @@ img.profile-avatar {
 
 .home-assert-card {
   display: grid;
-  gap: 13px;
+  gap: 12px;
   padding: 18px;
-  border: 1px solid rgba(64, 92, 255, 0.12);
-  border-radius: var(--radius-card);
-  background: #f6f8ff;
-  box-shadow: 0 10px 24px rgba(64, 92, 255, 0.08);
+  border: 1px solid rgba(64, 92, 255, 0.16);
+  border-radius: 24px;
+  background: #f7f9ff;
+  box-shadow: 0 4px 20px rgba(64, 92, 255, 0.06);
+}
+
+.home-assert-card .assert-pass-top {
+  align-items: center;
+}
+
+.home-assert-card .assert-pass-top b {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--indigo);
+}
+
+.home-assert-card .live-pill {
+  padding: 5px 11px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+
+.home-assert-card .live-pill.pending {
+  color: var(--blue-deep) !important;
+  background: rgba(64, 92, 255, 0.1);
+  border-color: rgba(64, 92, 255, 0.24);
 }
 
 .home-assert-card h3 {
-  margin: 2px 0;
+  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-family: var(--font-display);
-  font-size: clamp(31px, 8vw, 42px);
-  line-height: 0.96;
-  letter-spacing: -0.04em;
+  font-size: clamp(26px, 6vw, 30px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
   text-transform: lowercase;
+  color: var(--indigo);
 }
 
-.home-assert-card p {
-  margin: 0;
-  max-width: 460px;
-  color: var(--muted);
+.home-assert-state {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.home-assert-state svg {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  color: var(--blue);
+}
+
+.home-assert-state .state-line {
+  display: block;
+  color: var(--indigo);
   font-size: 14px;
-  line-height: 1.45;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.home-assert-state .state-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 
 .home-assert-action {
   width: 100%;
   display: inline-flex;
   justify-content: center;
-  padding: 12px 14px;
+  align-items: center;
+  padding: 9px 14px;
   border-radius: var(--radius-control);
-  background: rgba(64, 92, 255, 0.08);
+  background: rgba(64, 92, 255, 0.09);
   color: var(--blue-deep);
-  font-size: 13px;
-  font-weight: 900;
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   text-decoration: none;
 }
 
