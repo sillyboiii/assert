@@ -13,6 +13,7 @@ contract CommitmentTest is Test {
     uint256 constant FEE_BPS = 200;
     uint256 constant MIN_STAKE = 0.001 ether;
     uint256 constant MAX_STAKE = 5 ether;
+    uint256 constant GRACE = 2 days;
     uint256 stake = 1 ether;
 
     function setUp() public {
@@ -187,13 +188,14 @@ contract CommitmentTest is Test {
         c.approve(id);
     }
 
-    function test_Revert_Approve_AfterDeadline() public {
+    function test_Approve_AtDeadlinePlusOne_WithinGrace() public {
         uint256 id = _create();
         _accept(id);
         vm.warp(_deadline() + 1);
         vm.prank(referee);
-        vm.expectRevert(Commitment.DeadlineExpired.selector);
         c.approve(id);
+        (, , , , , , Commitment.Status s) = c.goals(id);
+        assertEq(uint8(s), uint8(Commitment.Status.Approved));
     }
 
     function test_ClaimReferee_AfterDeadline_PaysReferee() public {
@@ -204,6 +206,7 @@ contract CommitmentTest is Test {
         uint256 refereeBefore = referee.balance;
         uint256 treasuryBefore = treasury.balance;
 
+        vm.prank(referee);
         c.claimReferee(id);
 
         uint256 fee = stake * FEE_BPS / 10_000;
@@ -217,6 +220,7 @@ contract CommitmentTest is Test {
     function test_Revert_ClaimReferee_BeforeDeadline() public {
         uint256 id = _create();
         _accept(id);
+        vm.prank(referee);
         vm.expectRevert(Commitment.DeadlineNotReached.selector);
         c.claimReferee(id);
     }
@@ -224,6 +228,7 @@ contract CommitmentTest is Test {
     function test_Revert_ClaimReferee_WhenPending() public {
         uint256 id = _create();
         vm.warp(_deadline() + 1);
+        vm.prank(referee);
         vm.expectRevert(Commitment.NotStarted.selector);
         c.claimReferee(id);
     }
@@ -245,8 +250,103 @@ contract CommitmentTest is Test {
         _accept(id);
         assertTrue(address(c).balance > 0);
         vm.warp(_deadline() + 1);
+        vm.prank(referee);
         c.claimReferee(id);
         assertEq(address(c).balance, 0);
+    }
+
+    function test_Approve_WithinGrace_AfterDeadline() public {
+        uint256 id = _create();
+        _accept(id);
+        vm.warp(_deadline() + 1 days);
+
+        uint256 creatorBefore = creator.balance;
+        vm.prank(referee);
+        c.approve(id);
+
+        uint256 fee = stake * FEE_BPS / 10_000;
+        assertEq(creator.balance, creatorBefore + stake - fee);
+        (, , , , , , Commitment.Status s) = c.goals(id);
+        assertEq(uint8(s), uint8(Commitment.Status.Approved));
+    }
+
+    function test_Revert_Approve_AfterGrace() public {
+        uint256 id = _create();
+        _accept(id);
+        vm.warp(_deadline() + GRACE + 1);
+        vm.prank(referee);
+        vm.expectRevert(Commitment.DeadlineExpired.selector);
+        c.approve(id);
+    }
+
+    function test_Forfeit_ByCreator_PaysReferee() public {
+        uint256 id = _create();
+        _accept(id);
+        vm.warp(_deadline() + 1);
+
+        uint256 refereeBefore = referee.balance;
+        uint256 treasuryBefore = treasury.balance;
+
+        vm.prank(creator);
+        c.forfeit(id);
+
+        uint256 fee = stake * FEE_BPS / 10_000;
+        assertEq(referee.balance, refereeBefore + stake - fee);
+        assertEq(treasury.balance, treasuryBefore + fee);
+        assertEq(address(c).balance, 0);
+        (, , , , , , Commitment.Status s) = c.goals(id);
+        assertEq(uint8(s), uint8(Commitment.Status.Failed));
+    }
+
+    function test_Revert_Forfeit_ByReferee() public {
+        uint256 id = _create();
+        _accept(id);
+        vm.warp(_deadline() + 1);
+        vm.prank(referee);
+        vm.expectRevert(Commitment.NotCreator.selector);
+        c.forfeit(id);
+    }
+
+    function test_Revert_ClaimReferee_AfterGrace() public {
+        uint256 id = _create();
+        _accept(id);
+        vm.warp(_deadline() + GRACE + 1);
+        vm.prank(referee);
+        vm.expectRevert(Commitment.GraceExpired.selector);
+        c.claimReferee(id);
+    }
+
+    function test_RefundNoShow_AfterGrace_FullRefund() public {
+        uint256 id = _create();
+        _accept(id);
+        vm.warp(_deadline() + GRACE + 1);
+
+        uint256 creatorBefore = creator.balance;
+        vm.prank(creator);
+        c.refundNoShow(id);
+
+        assertEq(creator.balance, creatorBefore + stake);
+        assertEq(address(c).balance, 0);
+        (, , , , , , Commitment.Status s) = c.goals(id);
+        assertEq(uint8(s), uint8(Commitment.Status.Cancelled));
+    }
+
+    function test_Revert_RefundNoShow_BeforeGrace() public {
+        uint256 id = _create();
+        _accept(id);
+        vm.warp(_deadline() + 1);
+        vm.prank(creator);
+        vm.expectRevert(Commitment.GraceNotReached.selector);
+        c.refundNoShow(id);
+    }
+
+    function test_Revert_RefundNoShow_WhenNotCreator() public {
+        uint256 id = _create();
+        _accept(id);
+        vm.warp(_deadline() + GRACE + 1);
+        vm.prank(stranger);
+        vm.expectRevert(Commitment.NotCreator.selector);
+        c.refundNoShow(id);
     }
 
     function test_SetFee_OnlyOwner() public {

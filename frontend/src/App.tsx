@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, getAbiItem, getAddress, http, parseUnits, formatEther } from 'viem';
-import { baseSepolia, mainnet } from 'viem/chains';
+import { base, baseSepolia, mainnet } from 'viem/chains';
 import {
   useAccount,
   useConnect,
@@ -618,6 +618,7 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
   const { writeContractAsync, isPending } = useWriteContract();
   const { chainId, address } = useAccount();
   const { switchChain } = useSwitchChain();
+  const isBase = chainId === base.id;
   const onTestnet = chainId === baseSepolia.id;
   const publicClient = usePublicClient();
 
@@ -651,8 +652,8 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
   const submit = async () => {
     setError('');
     try {
-      if (chainId !== baseSepolia.id) {
-        setError('switch your wallet to base sepolia (testnet) before creating — mainnet uses real money.');
+      if (chainId !== base.id && chainId !== baseSepolia.id) {
+        setError('switch your wallet to base before creating.');
         return;
       }
       const amt = Number(stake);
@@ -727,13 +728,11 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
         <div className="network-chip-row">
           {onTestnet ? (
             <span className="network-chip testnet">base sepolia · testnet</span>
+          ) : isBase ? (
+            <span className="network-chip mainnet">base · mainnet</span>
           ) : (
-            <button
-              type="button"
-              className="network-chip switch"
-              onClick={() => switchChain({ chainId: baseSepolia.id })}
-            >
-              switch to base sepolia ↻
+            <button type="button" className="network-chip switch" onClick={() => switchChain({ chainId: base.id })}>
+              switch to base ↻
             </button>
           )}
         </div>
@@ -956,7 +955,7 @@ function HomeAssertCard({ goal, status }: { goal: CreatedArgs; status: number })
             <>
               <span className="state-line">{refereeName} is watching</span>
               <span className="state-sub">
-                {cd.expired ? 'time is up' : `${cd.out} left`} · {refereeName} takes {fmt(goal.amount)} ETH if you bail
+                {cd.expired ? 'time is up · referee calls it within 2 days' : `${cd.out} left`} · {refereeName} takes {fmt(goal.amount)} ETH if you bail
               </span>
             </>
           ) : (
@@ -1438,6 +1437,7 @@ function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focu
   });
   const raw = data as GoalStruct | undefined;
   const { out, expired } = useCountdown(raw?.[5]);
+  const { expired: graceOver } = useCountdown(raw?.[5] !== undefined ? raw[5] + 172800n : 0n);
   if (!raw) return null;
 
   const [creator, referee, goalText, amount, feeAmount, , status] = raw;
@@ -1459,7 +1459,7 @@ function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focu
   const refund = amount - feeAmount;
   const { title, description } = splitGoalText(goalText);
 
-  const run = async (functionName: 'acceptRole' | 'approve' | 'cancel' | 'claimReferee') => {
+  const run = async (functionName: 'acceptRole' | 'approve' | 'cancel' | 'claimReferee' | 'forfeit' | 'refundNoShow') => {
     const hash = await writeContractAsync({
       address: COMMITMENT_ADDRESS,
       abi: commitmentAbi,
@@ -1491,7 +1491,11 @@ function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focu
             <>
               <span className="state-line">{isReferee ? 'you' : short(referee, 4)} is watching you</span>
               <span className="state-sub">
-                {expired ? 'time is up' : `${out} left`} · {isReferee ? 'you' : short(referee, 4)} takes {fmt(amount)} ETH if you bail
+                {graceOver
+                  ? 'referee never called it — stake returned.'
+                  : expired
+                    ? 'time is up · referee has 2 days to call it'
+                    : `${out} left`} · {isReferee ? 'you' : short(referee, 4)} takes {fmt(amount)} ETH if you bail
               </span>
             </>
           ) : status === 2 ? (
@@ -1507,7 +1511,7 @@ function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focu
           ) : (
             <>
               <span className="state-line">Cancelled — full refund</span>
-              <span className="state-sub">Assert voided before activation.</span>
+              <span className="state-sub">Assert voided — stake returned in full.</span>
             </>
           )}
         </div>
@@ -1541,21 +1545,29 @@ function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focu
             cancel · refund
           </button>
         )}
-        {status === 1 && isReferee && (
+        {status === 1 && isReferee && !graceOver && (
           <button className="btn green" onClick={() => run('approve')} disabled={isPending}>
             ✓ they did it
           </button>
         )}
-        {status === 1 && expired && (
+        {status === 1 && expired && isReferee && !graceOver && (
           <button className="btn red" onClick={() => run('claimReferee')} disabled={isPending}>
             referee earns stake
           </button>
         )}
-        {status === 1 && isCreator && expired ? (
-          <button className="btn ghost" onClick={() => run('claimReferee')} disabled={isPending}>
+        {status === 1 && expired && isCreator && !graceOver && (
+          <button className="btn ghost" onClick={() => run('forfeit')} disabled={isPending}>
             I missed it — pay out
           </button>
-        ) : null}
+        )}
+        {status === 1 && graceOver && isCreator && (
+          <button className="btn ghost" onClick={() => run('refundNoShow')} disabled={isPending}>
+            reclaim stake · referee no-show
+          </button>
+        )}
+        {status === 1 && graceOver && !isCreator && (
+          <span className="muted">2-day window closed — stake returned to creator</span>
+        )}
         {status === 2 && <span className="muted">✓ honored — stake returned</span>}
         {status === 3 && <span className="muted">✗ humbled — referee earned it</span>}
         {status === 4 && <span className="muted">cancelled — full refund</span>}
@@ -1659,9 +1671,9 @@ const LEGAL: Record<'terms' | 'privacy', { eyebrow: string; title: string; updat
       {
         heading: '3. your stake is real',
         paras: [
-          'When you assert a goal, your stake is locked onchain and is not refundable. If you hit your commitment your stake and your referee\'s stake are returned. If you miss, the pot is paid out as the rules you agreed to when you created the commitment.',
+          'When you assert a goal, your stake is locked onchain and is not refundable. If you hit your commitment your stake and your referee\'s stake are returned. If you miss, the pot is paid out as the rules you agreed to when you created the commitment. When a commitment ends, the referee has a two-day window to call the outcome; if they never call it, your stake is returned.',
           'Transactions on Base cannot be reversed. Double-check every goal, amount, deadline and referee before you sign — there are no takebacks, by design.',
-          'The app is currently deployed to the Base testnet (Base Sepolia) for production testing. Stakes you place there are test assets with no monetary value and can be refilled freely. If we move the app to a production network, stakes will carry real value and the same no-takebacks rule will apply.',
+          'The app runs on the Base network. Stakes carry real value and the same no-takebacks rule applies.',
         ],
       },
       {

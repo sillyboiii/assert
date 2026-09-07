@@ -70,6 +70,19 @@ export const commitmentAbi = [
   },
   {
     "type": "function",
+    "name": "REFEREE_GRACE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "acceptRole",
     "inputs": [
       {
@@ -161,6 +174,19 @@ export const commitmentAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "forfeit",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -262,6 +288,19 @@ export const commitmentAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "refundNoShow",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -469,6 +508,16 @@ export const commitmentAbi = [
   {
     "type": "error",
     "name": "GoalTooLong",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "GraceExpired",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "GraceNotReached",
     "inputs": []
   },
   {

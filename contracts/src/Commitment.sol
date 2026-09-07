@@ -18,6 +18,7 @@ contract Commitment {
 
     uint256 public constant MIN_LOCK_HOURS = 1 hours;
     uint256 public constant MAX_LOCK_DAYS = 365 days;
+    uint256 public constant REFEREE_GRACE = 2 days;
     uint256 public immutable minStake;
     uint256 public immutable maxStake;
 
@@ -51,6 +52,8 @@ contract Commitment {
     error NotStarted();
     error DeadlineExpired();
     error DeadlineNotReached();
+    error GraceExpired();
+    error GraceNotReached();
     error TransferFailed();
 
     modifier onlyOwner() {
@@ -119,7 +122,7 @@ contract Commitment {
         Goal storage g = goals[id];
         if (msg.sender != g.referee) revert NotReferee();
         if (g.status != Status.Active) revert NotStarted();
-        if (block.timestamp > g.deadline) revert DeadlineExpired();
+        if (block.timestamp > g.deadline + REFEREE_GRACE) revert DeadlineExpired();
 
         g.status = Status.Approved;
         _payOut(id, g.creator);
@@ -128,12 +131,38 @@ contract Commitment {
 
     function claimReferee(uint256 id) external {
         Goal storage g = goals[id];
+        if (msg.sender != g.referee) revert NotReferee();
         if (g.status != Status.Active) revert NotStarted();
         if (block.timestamp <= g.deadline) revert DeadlineNotReached();
+        if (block.timestamp > g.deadline + REFEREE_GRACE) revert GraceExpired();
 
         g.status = Status.Failed;
         _payOut(id, g.referee);
         emit Failed(id, g.amount - g.feeAmount);
+    }
+
+    function forfeit(uint256 id) external {
+        Goal storage g = goals[id];
+        if (msg.sender != g.creator) revert NotCreator();
+        if (g.status != Status.Active) revert NotStarted();
+        if (block.timestamp <= g.deadline) revert DeadlineNotReached();
+        if (block.timestamp > g.deadline + REFEREE_GRACE) revert GraceExpired();
+
+        g.status = Status.Failed;
+        _payOut(id, g.referee);
+        emit Failed(id, g.amount - g.feeAmount);
+    }
+
+    function refundNoShow(uint256 id) external {
+        Goal storage g = goals[id];
+        if (msg.sender != g.creator) revert NotCreator();
+        if (g.status != Status.Active) revert NotStarted();
+        if (block.timestamp <= g.deadline + REFEREE_GRACE) revert GraceNotReached();
+
+        g.status = Status.Cancelled;
+        (bool ok, ) = g.creator.call{value: g.amount}("");
+        if (!ok) revert TransferFailed();
+        emit Cancelled(id, g.amount);
     }
 
     function cancel(uint256 id) external {
