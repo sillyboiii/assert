@@ -10,6 +10,8 @@
   --green: #2fb57d;
   --red: #f0526e;
   --amber: #f59e0b;
+  --radius-card: 20px;
+  --radius-control: 12px;
   --font-display: 'Baloo 2', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
   --font-body: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
@@ -965,6 +967,14 @@ main {
   box-shadow: 0 14px 34px rgba(64, 92, 255, 0.07);
 }
 
+.tab-shell {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
 .tab-head {
   display: grid;
   gap: 4px;
@@ -1023,7 +1033,7 @@ main {
 .friend-card {
   width: 100%;
   border: 1px solid rgba(64, 92, 255, 0.1);
-  border-radius: 22px;
+  border-radius: var(--radius-card);
   background: var(--white);
   color: var(--indigo);
   padding: 16px;
@@ -1165,7 +1175,7 @@ main {
   min-width: 230px;
   padding: 10px;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 22px 54px rgba(17, 20, 61, 0.16), 0 0 0 6px rgba(64, 92, 255, 0.04);
   transform-origin: top right;
@@ -1174,7 +1184,7 @@ main {
 
 .friend-bubble button {
   border: none;
-  border-radius: 15px;
+  border-radius: var(--radius-control);
   background: #f8faff;
   color: var(--indigo);
   padding: 13px 14px;
@@ -1464,13 +1474,10 @@ img.profile-avatar {
   grid-template-columns: 1fr auto;
   gap: 14px;
   align-items: start;
-  padding: 19px 20px;
-  border-radius: 28px;
-  background:
-    radial-gradient(circle at 90% 8%, rgba(64, 92, 255, 0.08), transparent 24%),
-    var(--white);
-  border: 1px solid rgba(64, 92, 255, 0.14);
-  box-shadow: 0 18px 45px rgba(17, 20, 61, 0.08);
+  padding: 8px 0 2px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .home-card-wordmark {
@@ -1501,7 +1508,7 @@ img.profile-avatar {
   width: 50px;
   height: 50px;
   border: none;
-  border-radius: 18px;
+  border-radius: var(--radius-control);
   background: var(--blue);
   color: var(--white);
   font-family: var(--font-display);
@@ -1512,17 +1519,13 @@ img.profile-avatar {
 }
 
 .on-line-strip {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.on-line-strip > div {
-  min-width: 0;
-  padding: 10px 11px;
-  border-radius: 17px;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid var(--line);
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .on-line-strip span,
@@ -1536,21 +1539,20 @@ img.profile-avatar {
 }
 
 .on-line-strip b {
-  display: block;
-  margin-top: 3px;
   font-family: var(--font-display);
   font-size: 18px;
   line-height: 1;
+  color: var(--indigo);
 }
 
 .active-carousel,
 .activity-panel,
 .social-panel {
-  padding: 18px;
-  border-radius: 25px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--line);
-  box-shadow: 0 14px 34px rgba(64, 92, 255, 0.07);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .section-head.clean .section-title {
@@ -2130,8 +2132,8 @@ img.profile-avatar {
 
 .start-zone,
 .app-panel {
-  border-radius: 28px;
-  padding: 24px;
+  border-radius: 0;
+  padding: 0;
 }
 
 .start-zone h3 {
@@ -3197,15 +3199,19 @@ select:focus {
   align-items: center;
   gap: 14px;
   background: var(--white);
-  border: 1px solid var(--line);
-  border-radius: 18px;
+  border: 0;
+  border-radius: var(--radius-card);
   padding: 14px 18px;
-  transition: transform 0.12s ease, border-color 0.15s ease;
+  transition: transform 0.12s ease, background 0.15s ease;
+}
+
+.top-panel .feed-list {
+  gap: 8px;
 }
 
 .feed-row:hover {
   transform: translateX(4px);
-  border-color: var(--blue);
+  background: #f8faff;
 }
 
 .feed-rank {
@@ -3541,37 +3547,31 @@ footer a {
   grid-template-columns: 52px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
-  padding: 15px 16px;
-  border-radius: 22px;
-  border: 1px solid rgba(64, 92, 255, 0.12);
-  background: var(--white);
-  transition: transform 0.14s ease, border-color 0.16s ease, box-shadow 0.18s ease;
+  padding: 12px 0;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  transition: transform 0.14s ease;
 }
 
 .feed-item:hover {
   transform: translateY(-2px);
-  border-color: rgba(64, 92, 255, 0.26);
-  box-shadow: 0 14px 32px rgba(64, 92, 255, 0.08);
 }
 
 .feed-item.live {
-  background: #eef4ff;
-  border-color: rgba(64, 92, 255, 0.16);
+  color: var(--indigo);
 }
 
 .feed-item.won {
-  background: #eefaf3;
-  border-color: rgba(20, 108, 70, 0.16);
+  color: var(--indigo);
 }
 
 .feed-item.folded {
-  background: #fff0f3;
-  border-color: rgba(180, 35, 75, 0.16);
+  color: var(--indigo);
 }
 
 .feed-item.day {
-  background: #f4f1ff;
-  border-color: rgba(91, 75, 214, 0.16);
+  color: var(--indigo);
 }
 
 .feed-avatar {
@@ -3781,7 +3781,7 @@ footer a {
   text-align: left;
   padding: 18px;
   border: 1px solid rgba(64, 92, 255, 0.14);
-  border-radius: 26px;
+  border-radius: var(--radius-card);
   background: linear-gradient(150deg, var(--white), #f8faff 118%);
   color: var(--indigo);
   min-height: 188px;

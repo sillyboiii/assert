@@ -1263,20 +1263,13 @@ function DisciplineHome({
         <button className="home-plus" onClick={onStart} aria-label="create assert">+</button>
       </section>
 
-      <section className="on-line-strip" aria-label="what's on the line">
-        <div>
-          <span>on the line</span>
-          <b>{ethAtRisk ? `${ethAtRisk.toFixed(3).replace(/\.?0+$/, '')} ETH` : '0 ETH'}</b>
-        </div>
-        <div>
-          <span>active</span>
-          <b>{active}</b>
-        </div>
-        <div>
-          <span>friends watching</span>
-          <b>{friendCount || '0'}</b>
-        </div>
-      </section>
+      <div className="on-line-strip" aria-label="what's on the line">
+        <b>{ethAtRisk ? `${ethAtRisk.toFixed(3).replace(/\.?0+$/, '')} ETH` : '0 ETH'}</b> on the line
+        <span>·</span>
+        <b>{active}</b> active
+        <span>·</span>
+        <b>{friendCount || '0'}</b> friend{friendCount === 1 ? '' : 's'} watching
+      </div>
 
       <section className="active-carousel">
         <div className="section-head clean">
