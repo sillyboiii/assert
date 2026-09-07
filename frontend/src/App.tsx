@@ -1413,7 +1413,7 @@ function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
     args: [BigInt(id)],
   });
   const raw = data as GoalStruct | undefined;
-  const { out, urgent, expired } = useCountdown(raw?.[5]);
+  const { out, expired } = useCountdown(raw?.[5]);
   if (!raw) return null;
 
   const [creator, referee, goalText, amount, feeAmount, , status] = raw;
@@ -1446,18 +1446,44 @@ function GoalCard({ id, only }: { id: string; only?: AssertFilter }) {
   };
 
   return (
-    <div className="card goal assert-detail-card fade-up-1">
+    <div className={`card goal assert-detail-card fade-up-1${status === 1 ? ' live' : ''}`}>
       <div className="goal-top assert-pass-top">
         <span className={`status s${status}`}>{STATUS_LABEL[status]}</span>
         <b>{fmt(amount)} ETH</b>
       </div>
       <p className="goal-text">{goalText}</p>
-      <div className="assert-human-row goal-human-row">
-        <span><MiniAvatar name={isReferee ? 'you' : short(referee, 4)} />{isReferee ? 'you' : short(referee, 4)} · referee</span>
-        <span className={urgent && !expired ? 'time-left urgent' : 'time-left'}>{expired ? 'done' : `${out} left`}</span>
-      </div>
-      <div className="goal-meta">
-        <span>{isCreator ? 'you' : short(creator, 4)} asserted it</span>
+      <div className="home-assert-state">
+        <ClockIcon />
+        <div>
+          {status === 0 ? (
+            <>
+              <span className="state-line">Waiting on {isReferee ? 'you' : short(referee, 4)}.</span>
+              <span className="state-sub">Referee must accept to activate the assert.</span>
+            </>
+          ) : status === 1 ? (
+            <>
+              <span className="state-line">{isReferee ? 'you' : short(referee, 4)} is watching you</span>
+              <span className="state-sub">
+                {expired ? 'time is up' : `${out} left`} · {isReferee ? 'you' : short(referee, 4)} takes {fmt(amount)} ETH if you bail
+              </span>
+            </>
+          ) : status === 2 ? (
+            <>
+              <span className="state-line">Honored — stake returned</span>
+              <span className="state-sub">{isCreator ? 'you' : short(creator, 4)} kept their word.</span>
+            </>
+          ) : status === 3 ? (
+            <>
+              <span className="state-line">Missed — {isReferee ? 'you' : short(referee, 4)} earned it</span>
+              <span className="state-sub">Referee collected the stake.</span>
+            </>
+          ) : (
+            <>
+              <span className="state-line">Cancelled — full refund</span>
+              <span className="state-sub">Assert voided before activation.</span>
+            </>
+          )}
+        </div>
       </div>
       {(status === 0 || status === 1) && (
         <div className="outcome-split">
