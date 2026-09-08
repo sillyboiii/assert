@@ -9,17 +9,20 @@ import {
   usePublicClient,
   useReadContract,
   useReadContracts,
+  useSignMessage,
   useSwitchChain,
   useWriteContract,
 } from 'wagmi';
 import { commitmentAbi } from './Commitment.abi.ts';
 import { COMMITMENT_ADDRESS, STATUS_LABEL } from './lib/wagmi.ts';
 import { waitForTx } from './lib/tx.ts';
+import { clearAuthToken, ensureAuthToken, mintAuthToken, setMintHook } from './lib/auth.ts';
 import {
   readStoredPreferences,
   readStoredProfile,
   saveStoredPreferences,
   saveStoredProfile,
+  hasSupabase,
 } from './lib/supabase.ts';
 
 type GoalStruct = [
@@ -1913,6 +1916,7 @@ function LandingSubstance() {
 
 export default function App() {
   const { isConnected, chainId, address } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const [appMode, setAppMode] = useState<AppMode>(() => {
     const saved = localStorage.getItem('assert-app-mode');
     return saved === 'home' || saved === 'asserts' || saved === 'builder' || saved === 'friends' || saved === 'you'
@@ -1923,6 +1927,19 @@ export default function App() {
   const [draftReferee, setDraftReferee] = useState<string | undefined>();
   const onKnownChain = chainId === 8453 || chainId === 84532;
   const { data: allGoals } = useAllCreated();
+  useEffect(() => {
+    if (!address || !hasSupabase) {
+      setMintHook(null);
+      clearAuthToken();
+      return;
+    }
+    const wallet = address as `0x${string}`;
+    setMintHook(() => mintAuthToken((message) => signMessageAsync({ message }), wallet));
+    ensureAuthToken().catch((error) => console.warn('Supabase auth failed', error));
+    return () => {
+      setMintHook(null);
+    };
+  }, [address, signMessageAsync]);
   const profile = address ? profiles[address] ?? defaultProfile(address) : defaultProfile();
   const saveProfile = (nextProfile: UserProfile) => {
     if (!address) return;

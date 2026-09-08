@@ -1,3 +1,5 @@
+import { awaitAuthToken, clearAuthToken, ensureAuthToken } from './auth.ts';
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
@@ -16,18 +18,27 @@ export type StoredPreferences = {
   hidden_friend_addresses: string[];
 };
 
-const headers = () => ({
-  apikey: SUPABASE_ANON_KEY!,
-  authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-  'content-type': 'application/json',
-});
-
-async function request<T>(path: string, init?: RequestInit): Promise<T | undefined> {
+async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T | undefined> {
   if (!hasSupabase) return undefined;
+  let token = await ensureAuthToken();
+  if (!token) token = await awaitAuthToken();
+  if (!token) return undefined;
+  const headers = new Headers({
+    apikey: SUPABASE_ANON_KEY!,
+    authorization: `Bearer ${token}`,
+    'content-type': 'application/json',
+  });
+  if (init?.headers) {
+    for (const [key, value] of new Headers(init.headers)) headers.set(key, value);
+  }
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...init,
-    headers: { ...headers(), ...init?.headers },
+    headers,
   });
+  if (response.status === 401 || response.status === 403) {
+    clearAuthToken();
+    if (!retried) return request<T>(path, init, true);
+  }
   if (!response.ok) throw new Error(`Supabase ${response.status}: ${await response.text()}`);
   return response.status === 204 ? undefined : ((await response.json()) as T);
 }
