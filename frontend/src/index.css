@@ -1736,6 +1736,7 @@ img.profile-avatar {
   color: var(--indigo);
 }
 
+.active-carousel,
 .activity-panel,
 .social-panel {
   padding: 0;
@@ -1745,46 +1746,8 @@ img.profile-avatar {
   box-shadow: none;
 }
 
-.active-carousel,
-.social-feed-section,
-.followed-section {
-  position: relative;
-  display: grid;
-  gap: 14px;
-  padding: 18px;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(37, 33, 79, 0.08);
-  box-shadow: 0 16px 36px rgba(37, 33, 79, 0.06);
-}
-
-.active-carousel::before,
-.social-feed-section::before,
-.followed-section::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 5px;
-  border-radius: 28px 0 0 28px;
-  background: #405cff;
-}
-
-.social-feed-section::before {
-  background: #6e6a8a;
-}
-
-.followed-section::before {
-  background: #2fb57d;
-}
-
 .section-head.clean .section-title {
   margin: 0;
-}
-
-.active-carousel .section-head,
-.social-feed-section .section-head,
-.followed-section .section-head {
-  padding-left: 4px;
 }
 
 .active-scroll {
