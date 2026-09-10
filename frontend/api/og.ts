@@ -24,7 +24,7 @@ function escapeXml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function wrap(text: string, max = 27) {
+function wrap(text: string, max: number, limit: number) {
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let line = '';
@@ -38,7 +38,13 @@ function wrap(text: string, max = 27) {
     }
   }
   if (line) lines.push(line);
-  return lines.slice(0, 2);
+  return lines.slice(0, limit);
+}
+
+function linesSvg(lines: string[], y: number, size: number, height: number) {
+  return lines
+    .map((line, i) => `<text x="0" y="${y + i * height}">${escapeXml(line)}</text>`)
+    .join('');
 }
 
 async function readGoal(id: string) {
@@ -68,24 +74,17 @@ export default async function handler(req: { query?: { id?: string } }, res: {
 }) {
   const goal = await readGoal(String(req.query?.id ?? ''));
   const title = goal?.title ?? 'wake up before 7am every day';
-  const lines = wrap(title);
+  const headline = wrap('JUST MADE AN ASSERT', 16, 2);
+  const titleLines = wrap(title, 15, 2);
   const due = goal?.deadline
     ? goal.deadline.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toLowerCase()
     : 'soon';
+  const amount = goal?.amount ?? '0.001';
   const badgeColor = '#405cff';
-  const lineSvg = lines
-    .map((line, i) => `<text x="0" y="${i * 34}">${escapeXml(line)}</text>`)
-    .join('');
+
   const card = Buffer.from(`
 <svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="cardBg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#f8fafc"/>
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%">
-      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#405cff" flood-opacity="0.15"/>
-    </filter>
     <style>
       @font-face {
         font-family: 'Plus Jakarta Sans';
@@ -100,27 +99,26 @@ export default async function handler(req: { query?: { id?: string } }, res: {
     </style>
   </defs>
   <rect width="1200" height="630" fill="#f7f3ea"/>
-  <circle cx="150" cy="60" r="180" fill="#eef3ff" opacity="0.6"/>
-  <circle cx="1080" cy="520" r="220" fill="#eef3ff" opacity="0.7"/>
-  <image href="data:image/png;base64,${WORDMARK_BASE64}" x="72" y="64" width="181" height="60" preserveAspectRatio="xMinYMin meet" opacity="0.95"/>
-  <g transform="translate(592 216) rotate(6.5 250 105)" filter="url(#shadow)">
-    <rect x="-36" y="-36" width="572" height="282" rx="40" fill="#ffffff"/>
-    <clipPath id="cardClip"><rect width="500" height="210" rx="29"/></clipPath>
-    <g clip-path="url(#cardClip)">
-      <rect width="500" height="210" rx="29" fill="url(#cardBg)" stroke="#dce3ff" stroke-width="1.5"/>
-      <rect width="500" height="5" y="0" fill="${badgeColor}" opacity="0.9"/>
+  <image href="data:image/png;base64,${WORDMARK_BASE64}" x="72" y="64" width="181" height="60" preserveAspectRatio="xMinYMin meet"/>
+
+  <g transform="translate(980 240) rotate(-5)" filter="drop-shadow(0 18px 30px rgba(64,92,255,0.18))">
+    <rect x="-241" y="-260" width="482" height="520" rx="44" fill="#eceaeb"/>
+    <g transform="translate(-210 -230)">
+      <rect x="172" y="24" width="62" height="34" rx="17" fill="${badgeColor}"/>
+      <text x="203" y="47" text-anchor="middle" fill="#fff" font-family="Plus Jakarta Sans" font-size="14.5" font-weight="900" letter-spacing="1.3">LIVE</text>
     </g>
-    <g transform="translate(28 25)">
-      <rect width="114" height="34" rx="17" fill="${badgeColor}"/>
-      <text x="57" y="23" text-anchor="middle" fill="#fff" font-family="Plus Jakarta Sans" font-size="14.5" font-weight="900" letter-spacing="1.3">LIVE</text>
-      <text x="136" y="24" fill="#081046" font-family="Plus Jakarta Sans" font-size="23" font-weight="900">${escapeXml(goal?.amount ?? '0.001')} ETH</text>
-    </g>
-    <g transform="translate(28 94)" fill="#071044" font-family="Plus Jakarta Sans" font-size="30" font-weight="900" letter-spacing="-1.2">
-      ${lineSvg}
-    </g>
-    <g transform="translate(28 178)">
-      <text fill="#747bad" font-family="Plus Jakarta Sans" font-size="17" font-weight="800">friend referees · due ${escapeXml(due)}</text>
-    </g>
+  </g>
+
+  <g transform="translate(75 300)" fill="#25214f" font-family="Plus Jakarta Sans" font-size="44" font-weight="900" letter-spacing="-1.2">
+    ${linesSvg(headline, 0, 44, 52)}
+  </g>
+
+  <g transform="translate(75 424)" fill="#25214f" font-family="Plus Jakarta Sans" font-size="40" font-weight="900" letter-spacing="-1">
+    ${linesSvg(titleLines, 0, 40, 48)}
+  </g>
+
+  <g transform="translate(75 500)">
+    <text fill="#6e6a8a" font-family="Plus Jakarta Sans" font-size="24" font-weight="800">${escapeXml(amount)} ETH on the line · friend referees · due ${escapeXml(due)}</text>
   </g>
 </svg>`);
   const image = await sharp(card)
