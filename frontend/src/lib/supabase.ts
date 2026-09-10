@@ -16,6 +16,14 @@ export type StoredPreferences = {
   wallet_address: string;
   dismissed_request_ids: string[];
   hidden_friend_addresses: string[];
+  followed_goal_ids: string[];
+};
+
+export type StoredRefereeDenial = {
+  goal_id: string;
+  creator_wallet: string;
+  referee_wallet: string;
+  created_at?: string;
 };
 
 async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T | undefined> {
@@ -50,6 +58,14 @@ export async function readStoredProfile(walletAddress: string) {
   return rows?.[0];
 }
 
+export async function readStoredProfiles(walletAddresses: string[]) {
+  const list = [...new Set(walletAddresses.map((a) => a.toLowerCase()))];
+  if (!list.length || !hasSupabase) return [];
+  const filter = `wallet_address=in.(${list.map((a) => `"${a}"`).join(',')})`;
+  const rows = await request<StoredProfile[]>(`profiles?${encodeURIComponent(filter)}&select=*`);
+  return rows ?? [];
+}
+
 export async function saveStoredProfile(profile: StoredProfile) {
   const rows = await request<StoredProfile[]>('profiles?on_conflict=wallet_address', {
     method: 'POST',
@@ -74,7 +90,31 @@ export async function saveStoredPreferences(preferences: StoredPreferences) {
       ...preferences,
       wallet_address: preferences.wallet_address.toLowerCase(),
       hidden_friend_addresses: preferences.hidden_friend_addresses.map((a) => a.toLowerCase()),
+      followed_goal_ids: preferences.followed_goal_ids,
     }),
   });
   return rows?.[0];
+}
+
+export async function readRefereeDenials(walletAddress: string) {
+  const wallet = walletAddress.toLowerCase();
+  const filter = `(creator_wallet.eq.${wallet},referee_wallet.eq.${wallet})`;
+  const rows = await request<StoredRefereeDenial[]>(
+    `referee_denials?or=${encodeURIComponent(filter)}&select=*`,
+  );
+  return rows ?? [];
+}
+
+export async function saveRefereeDenial(denial: Omit<StoredRefereeDenial, 'created_at'>) {
+  const rows = await request<StoredRefereeDenial[]>('referee_denials?on_conflict=goal_id', {
+    method: 'POST',
+    headers: { prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify({
+      goal_id: denial.goal_id,
+      creator_wallet: denial.creator_wallet.toLowerCase(),
+      referee_wallet: denial.referee_wallet.toLowerCase(),
+    }),
+  });
+  if (!rows?.[0]) throw new Error('Referee denial not saved');
+  return rows[0];
 }

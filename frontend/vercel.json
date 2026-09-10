@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/g/:id", "destination": "/api/assert-page?id=:id" }
+  ]
+}

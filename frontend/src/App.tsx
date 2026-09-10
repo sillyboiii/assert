@@ -12,6 +12,7 @@ import {
   useSignMessage,
   useSwitchChain,
   useWriteContract,
+  type Connector,
 } from 'wagmi';
 import { commitmentAbi } from './Commitment.abi.ts';
 import { COMMITMENT_ADDRESS, STATUS_LABEL } from './lib/wagmi.ts';
@@ -19,10 +20,14 @@ import { waitForTx } from './lib/tx.ts';
 import { clearAuthToken, ensureAuthToken, mintAuthToken, setMintHook } from './lib/auth.ts';
 import {
   readStoredPreferences,
+  readRefereeDenials,
   readStoredProfile,
+  readStoredProfiles,
+  saveRefereeDenial,
   saveStoredPreferences,
   saveStoredProfile,
   hasSupabase,
+  type StoredRefereeDenial,
 } from './lib/supabase.ts';
 
 type GoalStruct = [
@@ -61,9 +66,85 @@ type Friend = {
 
 const short = (a: `0x${string}` | undefined, n = 4) =>
   a ? `${a.slice(0, n + 2)}…${a.slice(-n)}` : '';
+const profileName = (
+  addr: `0x${string}` | undefined,
+  profiles: Record<string, UserProfile> = {},
+) => (addr ? (profiles[addr] ?? profiles[addr.toLowerCase()])?.username || short(addr, 4) : '');
 const fmt = (w: bigint) => (w === 0n ? '0' : Number(formatEther(w)).toFixed(3).replace(/\.?0+$/, ''));
 const FEE_BPS = 200n; // 2% protocol fee, mirrors the live contract
 const PROFILE_STORAGE_KEY = 'assert-profiles-v1';
+const MOCK_ADDRESS = '0xA45DE27583345d4A1357220d5FDaBE9140Ce6157' as const;
+const MOCK_REFEREE = '0x2d17E0dbcf32709A964a28074efa9528df71DEa4' as const;
+
+const MOCK_GOALS: CreatedArgs[] = [
+  {
+    id: 9001n,
+    creator: MOCK_ADDRESS,
+    referee: MOCK_REFEREE,
+    goalText: 'wake up before 7am every day for 21 days\n\nProof standard: morning check-in message',
+    amount: parseUnits('0.001', 18),
+    deadline: BigInt(Math.floor(Date.now() / 1000) + 21 * 86400),
+  },
+  {
+    id: 9002n,
+    creator: MOCK_ADDRESS,
+    referee: MOCK_REFEREE,
+    goalText: 'ship one meaningful product update this week\n\nProof standard: live link and public changelog',
+    amount: parseUnits('0.005', 18),
+    deadline: BigInt(Math.floor(Date.now() / 1000) + 7 * 86400),
+  },
+];
+
+function toGoalStruct(goal: CreatedArgs, status = 1): GoalStruct {
+  return [
+    goal.creator,
+    goal.referee,
+    goal.goalText,
+    goal.amount,
+    (goal.amount * FEE_BPS) / 10_000n,
+    goal.deadline,
+    status,
+  ];
+}
+
+function assertUrl(id: bigint | string) {
+  return `${window.location.origin}/g/${id.toString()}`;
+}
+
+function readDeepLinkedGoal() {
+  const hash = window.location.hash.match(/^#g\/(\d+)$/);
+  if (hash) return hash[1];
+  const path = window.location.pathname.match(/^\/g\/(\d+)$/);
+  return path ? path[1] : null;
+}
+
+function assertShareHref({ id, title, amount, status }: { id: bigint | string; title: string; amount: bigint; status: number }) {
+  const line = status === 2
+    ? `I kept my word on Assert: "${title}".`
+    : status === 1
+      ? `I put ${fmt(amount)} ETH on this assert: "${title}".`
+      : status === 0
+        ? `I just made an assert: "${title}".`
+        : `I put my word onchain with Assert: "${title}".`;
+  const text = `${line}\n\nNo streaks. No badges. Real accountability.`;
+  return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(assertUrl(id))}`;
+}
+
+function XLogo() {
+  return (
+    <svg className="x-logo" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="M18.9 2.9h3.3l-7.3 8.3 8.6 11.4h-6.7l-5.3-6.9-6 6.9H2.2l7.8-8.9L1.7 2.9h6.9l4.7 6.3 5.6-6.3Zm-1.2 17.7h1.8L7.6 4.8h-2l12.1 15.8Z" />
+    </svg>
+  );
+}
+
+function ShareOnXLabel() {
+  return (
+    <>
+      share on <XLogo />
+    </>
+  );
+}
 
 function defaultProfile(address?: `0x${string}`): UserProfile {
   return { username: address ? short(address, 3) : 'you', pfpUrl: '', locked: false };
@@ -83,6 +164,12 @@ function readStringList(key: string) {
   } catch {
     return [];
   }
+}
+
+const FOLLOWED_KEY = (address: string) => `assert-followed-goals:${address.toLowerCase()}`;
+
+function readFollowed(address: string): string[] {
+  return readStringList(FOLLOWED_KEY(address));
 }
 
 function ProfileAvatar({ profile, fallback = 'Y' }: { profile: UserProfile; fallback?: string }) {
@@ -134,13 +221,44 @@ function walletMeta(id?: string): { name: string; initial: string; color: string
       return { name: 'Browser wallet', initial: '⬡', color: 'var(--indigo)' };
     case 'mock':
       return { name: 'Demo wallet', initial: 'D', color: 'var(--blue)' };
-    default:
-      return { name: id ?? 'Wallet', initial: '•', color: 'var(--muted)' };
+    case 'io.metamask':
+      return { name: 'MetaMask', initial: 'M', color: '#F6851B' };
+    case 'io.rabby':
+      return { name: 'Rabby', initial: 'R', color: '#8B5CF6' };
+    case 'app.phantom':
+      return { name: 'Phantom', initial: 'P', color: '#AB9FF2' };
+    case 'com.brave.wallet':
+      return { name: 'Brave Wallet', initial: 'B', color: '#FB542B' };
+    case 'com.coinbase.wallet':
+      return { name: 'Coinbase Wallet', initial: 'C', color: '#0052FF' };
+    default: {
+      if (id && !id.includes('.')) return { name: id, initial: '•', color: 'var(--muted)' };
+      const last = (id ?? '').split('.').pop() ?? '';
+      const name = last ? last[0]!.toUpperCase() + last.slice(1) : 'Wallet';
+      return { name, initial: name[0] ?? '•', color: 'var(--muted)' };
+    }
   }
+}
+
+const LOGO_SRC: Record<string, string> = {
+  coinbaseWalletSDK: '/wallets/coinbase.svg',
+  'com.coinbase.wallet': '/wallets/coinbase.svg',
+  walletConnect: '/wallets/walletconnect.svg',
+};
+
+function WalletLogo({ connector }: { connector: Connector }) {
+  const src = connector.icon || LOGO_SRC[connector.id];
+  if (!src) return null;
+  return <img className="wallet-img" src={src} alt="" />;
 }
 
 function ConnectModal({ onClose }: { onClose: () => void }) {
   const { connect, connectors, isPending } = useConnect();
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const detected = connectors.filter((c) => c.type === 'injected' && c.id !== 'injected');
+  const used = detected.length > 0 ? detected : connectors.filter((c) => c.type === 'injected');
+  const pinned = connectors.filter((c) => c.type !== 'injected');
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -160,13 +278,56 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
           your keys stay in your wallet. we only read your address and ask you to approve payments — nothing else.
         </p>
         <div className="wallet-list">
-          {connectors.map((c) => {
+          {used.length > 0 && (
+            <div className="browser-group">
+              <button
+                className="wallet-row"
+                onClick={() => setBrowserOpen((v) => !v)}
+                disabled={isPending}
+                aria-expanded={browserOpen}
+              >
+                <span className="wallet-ico" style={{ background: 'var(--indigo)' }}>
+                  ⬡
+                </span>
+                <span className="wallet-name">Browser wallet</span>
+                <span className="wallet-cta">{browserOpen ? '▴' : '▾'}</span>
+              </button>
+              {browserOpen && (
+                <div className="browser-sub">
+                  {used.map((c) => {
+                    const meta = walletMeta(c.id);
+                    return (
+                      <button
+                        key={c.uid}
+                        className="wallet-row wallet-sub"
+                        onClick={() => connect({ connector: c })}
+                        disabled={isPending}
+                      >
+                        <WalletLogo connector={c} />
+                        {!c.icon && !LOGO_SRC[c.id] && (
+                          <span className="wallet-ico" style={{ background: meta.color }}>
+                            {meta.initial}
+                          </span>
+                        )}
+                        <span className="wallet-name">{meta.name}</span>
+                        <span className="wallet-cta">{isPending ? 'connecting…' : '→'}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {pinned.map((c) => {
             const meta = walletMeta(c.id);
             return (
               <button key={c.uid} className="wallet-row" onClick={() => connect({ connector: c })} disabled={isPending}>
-                <span className="wallet-ico" style={{ background: meta.color }}>
-                  {meta.initial}
-                </span>
+                <WalletLogo connector={c} />
+                {!c.icon && !LOGO_SRC[c.id] && (
+                  <span className="wallet-ico" style={{ background: meta.color }}>
+                    {meta.initial}
+                  </span>
+                )}
                 <span className="wallet-name">{meta.name}</span>
                 <span className="wallet-cta">{isPending ? 'connecting…' : '→'}</span>
               </button>
@@ -204,6 +365,7 @@ function ConnectButton({ label = 'Connect wallet' }: { label?: string }) {
 
 function useGoalsByIds(ids: bigint[]) {
   const { data } = useReadContracts({
+    chainId: base.id,
     contracts: ids.map((id) => ({
       address: COMMITMENT_ADDRESS,
       abi: commitmentAbi,
@@ -215,37 +377,36 @@ function useGoalsByIds(ids: bigint[]) {
 }
 
 function useAllCreated() {
-  const createdEvent = getAbiItem({ abi: commitmentAbi, name: 'Created' });
-  const publicClient = usePublicClient();
+  const publicClient = usePublicClient({ chainId: base.id });
   const chainId = publicClient?.chain.id;
   return useQuery({
     queryKey: ['allCreated', chainId],
     queryFn: async () => {
       if (!publicClient) return [];
-      // public base RPCs cap eth_getLogs at 10k-range windows, so we walk
-      // backward from latest in chunks and stop at the deploy boundary
-      const latest = await publicClient.getBlockNumber();
-      const CHUNK = 9_900n; // RPC caps inclusive from..to at 10,000
-      const MAX_CHUNKS = 40n; // ~396k blocks, way past the contract's young life
-      const seen = new Map<string, CreatedArgs>();
-      for (let i = 0n; i < MAX_CHUNKS; i++) {
-        const to = latest - i * CHUNK;
-        if (to <= 0n) break;
-        const from = to - CHUNK < 0n ? 0n : to - CHUNK;
-        const logs = await publicClient.getLogs({
+      const nextId = await publicClient.readContract({
+        address: COMMITMENT_ADDRESS,
+        abi: commitmentAbi,
+        functionName: 'nextId',
+      }) as bigint;
+      const total = Number(nextId);
+      if (!total) return [];
+      const results = await publicClient.multicall({
+        allowFailure: true,
+        contracts: Array.from({ length: total }, (_, id) => ({
           address: COMMITMENT_ADDRESS,
-          event: createdEvent,
-          fromBlock: BigInt(from),
-          toBlock: BigInt(to),
-        });
-        for (const l of logs) {
-          const a = l.args as CreatedArgs;
-          seen.set(a.id.toString(), a);
-        }
-        // first empty chunk = created before this window; stop early
-        if (logs.length === 0 && seen.size > 0) break;
-      }
-      return [...seen.values()].sort((a, b) => (a.id < b.id ? 1 : -1));
+          abi: commitmentAbi,
+          functionName: 'goals' as const,
+          args: [BigInt(id)],
+        })),
+      });
+      return results
+        .map((r, id) => {
+          if (r.status !== 'success') return undefined;
+          const [creator, referee, goalText, amount, , deadline] = r.result as GoalStruct;
+          return { id: BigInt(id), creator, referee, goalText, amount, deadline };
+        })
+        .filter((g): g is CreatedArgs => Boolean(g))
+        .sort((a, b) => (a.id < b.id ? 1 : -1));
     },
     refetchInterval: 20_000,
   });
@@ -802,6 +963,12 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
             />
           ))}
         </div>
+        {step < 2 && initialReferee ? (
+          <div className="wizard-referee-note">
+            adding <b>{initialReferee.startsWith('0x') ? short(initialReferee as `0x${string}`, 4) : initialReferee}</b>{' '}
+            to your circle — write what you're calling them out on.
+          </div>
+        ) : null}
       </div>
 
       {step === 0 && <Step1Goal goal={goal} setGoal={setGoal} />}
@@ -998,26 +1165,35 @@ function ClockIcon() {
   );
 }
 
-function HomeAssertCard({ goal, status }: { goal: CreatedArgs; status: number }) {
+function HomeAssertCard({ goal, status, profiles = {} }: { goal: CreatedArgs; status: number; profiles?: Record<string, UserProfile> }) {
+  const { address } = useAccount();
   const cd = useCountdown(goal.deadline);
-  const refereeName = short(goal.referee, 4);
+  const refereeName = profileName(goal.referee, profiles);
+  const isReferee = address !== undefined && goal.referee.toLowerCase() === address.toLowerCase();
+  const title = splitGoalText(goal.goalText).title;
   const label = status === 0 ? 'Pending' : 'Live';
   const live = status === 1;
   return (
-    <article className={`home-assert-card${live ? ' live' : ''}`}>
+    <article className={`home-assert-card${live ? ' live' : ''}${isReferee ? ' referee' : ''}`}>
       <div className="assert-pass-top">
         <span className={`live-pill ${label.toLowerCase()}`}>{label}</span>
+        {isReferee && (
+          <span className="referee-tag">
+            <span className="referee-tag-dot" />
+            you're the referee
+          </span>
+        )}
         <b>{fmt(goal.amount)} ETH</b>
       </div>
-      <h3>{splitGoalText(goal.goalText).title}</h3>
+      <h3>{title}</h3>
       <div className="home-assert-state">
         <ClockIcon />
         <div>
           {live ? (
             <>
-              <span className="state-line">{refereeName} is watching</span>
+              <span className="state-line">{isReferee ? 'you\'re refereeing this' : `${refereeName} is watching`}</span>
               <span className="state-sub">
-                {cd.expired ? 'time is up · referee calls it within 2 days' : `${cd.out} left`} · {refereeName} takes {fmt(goal.amount)} ETH if you bail
+                {cd.expired ? 'time is up · referee calls it within 2 days' : `${cd.out} left`} · {isReferee ? 'you' : refereeName} takes {fmt(goal.amount)} ETH if they bail
               </span>
             </>
           ) : (
@@ -1028,12 +1204,32 @@ function HomeAssertCard({ goal, status }: { goal: CreatedArgs; status: number })
           )}
         </div>
       </div>
-      <a href={`#g/${goal.id.toString()}`} className="home-assert-action">View assert →</a>
+      <div className="home-assert-actions">
+        <a href={`#g/${goal.id.toString()}`} className="home-assert-action">View assert →</a>
+        <a
+          href={assertShareHref({ id: goal.id, title, amount: goal.amount, status })}
+          className="home-assert-action share-action"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ShareOnXLabel />
+        </a>
+      </div>
     </article>
   );
 }
 
-function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
+function AssertsTab({
+  myGoals,
+  profiles = {},
+  statuses = [],
+  readOnly = false,
+}: {
+  myGoals: CreatedArgs[];
+  profiles?: Record<string, UserProfile>;
+  statuses?: (GoalStruct | undefined)[];
+  readOnly?: boolean;
+}) {
   const [filter, setFilter] = useState<AssertFilter>('Pending');
   return (
     <div className="social-app">
@@ -1049,7 +1245,7 @@ function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
         </div>
         <div className="assert-card-list">
           {myGoals.length ? (
-            myGoals.map((g) => <GoalCard key={g.id.toString()} id={g.id.toString()} only={filter} />)
+            myGoals.map((g, i) => <GoalCard key={g.id.toString()} id={g.id.toString()} only={filter} profiles={profiles} fallback={{ goal: g, status: statuses[i]?.[6] ?? 0 }} readOnly={readOnly} />)
           ) : (
             <p className="empty-copy">nothing {filter.toLowerCase()} yet.</p>
           )}
@@ -1061,22 +1257,34 @@ function AssertsTab({ myGoals }: { myGoals: CreatedArgs[] }) {
 
 function FriendsTab({
   requests,
+  deniedGoals,
   contacts,
   profiles,
   address,
   onStart,
+  onAddFriend,
+  onDenied,
   feed,
   myGoals,
   statuses,
+  followedIds,
+  onToggleFollow,
+  readOnly = false,
 }: {
   requests: CreatedArgs[];
+  deniedGoals: CreatedArgs[];
   contacts: `0x${string}`[];
   profiles: Record<string, UserProfile>;
   address?: `0x${string}`;
   onStart: (friend?: Friend) => void;
+  onAddFriend: (address: `0x${string}`) => void;
+  onDenied: (denial: StoredRefereeDenial) => void;
   feed: SocialFeedItem[];
   myGoals: CreatedArgs[];
   statuses: (GoalStruct | undefined)[];
+  followedIds: string[];
+  onToggleFollow: (id: bigint | string) => void;
+  readOnly?: boolean;
 }) {
   const { writeContractAsync, isPending } = useWriteContract();
   const dismissKey = address ? `assert-dismiss-referee:${address.toLowerCase()}` : '';
@@ -1090,13 +1298,32 @@ function FriendsTab({
     return readStringList(hiddenFriendKey);
   });
   const [openFriend, setOpenFriend] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [addAddr, setAddAddr] = useState('');
+  const [addError, setAddError] = useState('');
+  const [requestError, setRequestError] = useState('');
   const visibleRequests = requests.filter((r) => !dismissed.includes(r.id.toString()));
   const [filter, setFilter] = useState('');
   const filteredContacts = contacts.filter(
     (a) => !hiddenFriends.includes(a.toLowerCase()) && (!filter || short(a, 4).toLowerCase().includes(filter.toLowerCase())),
   );
+  const submitAdd = () => {
+    const raw = addAddr.trim();
+    if (raw.toLowerCase().endsWith('.eth')) {
+      setAddError('paste the wallet address (0x…) — ENS resolves inside the assert flow.');
+      return;
+    }
+    try {
+      onAddFriend(getAddress(raw));
+      setAdding(false);
+      setAddAddr('');
+      setAddError('');
+    } catch {
+      setAddError('that doesn\'t look like a valid address.');
+    }
+  };
   const accept = async (id: bigint) => {
-    const h = await writeContractAsync({ address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id] });
+    const h = await writeContractAsync({ chainId: base.id, address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id] });
     await waitForTx(h);
     window.location.reload();
   };
@@ -1108,12 +1335,27 @@ function FriendsTab({
       wallet_address: address,
       dismissed_request_ids: nextDismissed,
       hidden_friend_addresses: nextHiddenFriends,
+      followed_goal_ids: followedIds,
     }).catch((error) => console.warn('Supabase preferences save failed', error));
   };
   const dismiss = (id: bigint) => {
     const next = [...dismissed, id.toString()];
     setDismissed(next);
     persistPreferences(next, hiddenFriends);
+  };
+  const deny = async (goal: CreatedArgs) => {
+    setRequestError('');
+    try {
+      const denial = await saveRefereeDenial({
+        goal_id: goal.id.toString(),
+        creator_wallet: goal.creator,
+        referee_wallet: goal.referee,
+      });
+      onDenied(denial);
+      dismiss(goal.id);
+    } catch {
+      setRequestError('could not notify them yet. try again in a minute.');
+    }
   };
   const unfriend = (friendAddress: `0x${string}`) => {
     const next = [...hiddenFriends, friendAddress.toLowerCase()];
@@ -1161,6 +1403,8 @@ function FriendsTab({
           <span className="eyebrow">friends</span>
           <h2>your circle</h2>
         </div>
+        {requestError ? <p className="friend-add-error">{requestError}</p> : null}
+        <DeniedRequests goals={deniedGoals} profiles={profiles} />
         {visibleRequests.length ? (
           <div className="friend-requests">
             {visibleRequests.map((g) => (
@@ -1178,8 +1422,8 @@ function FriendsTab({
                     {isPending ? 'accepting…' : 'accept role'}
                   </button>
                   <a href={`#g/${g.id.toString()}`} className="btn ghost view-assert">view assert →</a>
-                  <button type="button" className="btn ghost" onClick={() => dismiss(g.id)} disabled={isPending}>
-                    dismiss
+                  <button type="button" className="btn ghost" onClick={() => deny(g)} disabled={isPending}>
+                    deny request
                   </button>
                 </div>
               </div>
@@ -1188,7 +1432,30 @@ function FriendsTab({
         ) : null}
         <div className="friend-toolbar">
           <input className="friend-search" placeholder="search friends" value={filter} onChange={(e) => setFilter(e.target.value)} />
-          <button type="button" className="small-blue" onClick={() => onStart()}>+ add friend</button>
+          {adding ? (
+            <div className="friend-add">
+              <div className="friend-add-row">
+                <input
+                  autoFocus
+                  placeholder="wallet address 0x…"
+                  value={addAddr}
+                  onChange={(e) => {
+                    setAddAddr(e.target.value);
+                    setAddError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitAdd();
+                  }}
+                />
+                <button type="button" className="small-blue" onClick={submitAdd} disabled={!addAddr.trim()}>add & assert</button>
+                <button type="button" className="small-ghost" onClick={() => { setAdding(false); setAddAddr(''); setAddError(''); }}>cancel</button>
+              </div>
+              <p className="muted friend-add-hint">friends join your circle when you put an assert on the line together.</p>
+              {addError ? <p className="friend-add-error">{addError}</p> : null}
+            </div>
+          ) : (
+            <button type="button" className="small-blue" onClick={() => setAdding(true)}>+ add friend</button>
+          )}
         </div>
         <div className="friend-list">
           {filteredContacts.length ? (
@@ -1233,11 +1500,28 @@ function FriendsTab({
             <div className="friends-empty">
               <h3>your circle is empty.</h3>
               <p>add someone you trust, then put something on the line.</p>
-              <button type="button" className="small-blue" onClick={() => onStart()}>+ add a friend</button>
+              <button type="button" className="small-blue" onClick={() => setAdding(true)}>+ add a friend</button>
             </div>
           )}
         </div>
       </section>
+      {followedIds.length ? (
+        <section className="followed-section">
+          <div className="section-head clean">
+            <h2 className="section-title">followed asserts</h2>
+          </div>
+          {followedIds.map((goalId) => (
+            <GoalCard
+              key={goalId}
+              id={goalId}
+              profiles={profiles}
+              readOnly={readOnly}
+              followed
+              onToggleFollow={onToggleFollow}
+            />
+          ))}
+        </section>
+      ) : null}
       {feed.length ? (
         <section className="social-feed-section">
           <div className="section-head clean">
@@ -1247,6 +1531,107 @@ function FriendsTab({
         </section>
       ) : null}
     </div>
+  );
+}
+
+function RefereeRequestNotices({
+  goals,
+  profiles,
+  onDenied,
+  onViewFriends,
+}: {
+  goals: CreatedArgs[];
+  profiles: Record<string, UserProfile>;
+  onDenied: (denial: StoredRefereeDenial) => void;
+  onViewFriends: () => void;
+}) {
+  const { writeContractAsync, isPending } = useWriteContract();
+  const [error, setError] = useState('');
+  const accept = async (id: bigint) => {
+    const h = await writeContractAsync({ chainId: base.id, address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id] });
+    await waitForTx(h);
+    window.location.reload();
+  };
+  const deny = async (goal: CreatedArgs) => {
+    setError('');
+    try {
+      const denial = await saveRefereeDenial({
+        goal_id: goal.id.toString(),
+        creator_wallet: goal.creator,
+        referee_wallet: goal.referee,
+      });
+      onDenied(denial);
+    } catch {
+      setError('could not notify them yet. try again in friends.');
+    }
+  };
+  if (!goals.length) return null;
+  return (
+    <section className="app-notices" aria-label="assert notifications">
+      {error ? <p className="friend-add-error">{error}</p> : null}
+      {goals.map((g) => {
+        const { title } = splitGoalText(g.goalText);
+        return (
+          <div className="friend-card-wrap request-card" key={`request-${g.id.toString()}`}>
+            <div className="friend-card">
+              <MiniAvatar name={profileName(g.creator, profiles)} />
+              <div>
+                <h3>{profileName(g.creator, profiles)} called you in</h3>
+                <p>{title}</p>
+                <b>{fmt(g.amount)} ETH waiting on you</b>
+              </div>
+            </div>
+            <div className="friend-bubble request-actions" role="group">
+              <button type="button" className="btn green" onClick={() => accept(g.id)} disabled={isPending}>
+                {isPending ? 'accepting…' : 'accept role'}
+              </button>
+              <a href={`#g/${g.id.toString()}`} className="btn ghost view-assert">view assert →</a>
+              <button type="button" className="btn ghost" onClick={() => deny(g)} disabled={isPending}>
+                deny request
+              </button>
+              <button type="button" className="btn ghost" onClick={onViewFriends}>
+                friends tab
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function DeniedRequests({ goals, profiles }: { goals: CreatedArgs[]; profiles: Record<string, UserProfile> }) {
+  const { writeContractAsync, isPending } = useWriteContract();
+  const cancel = async (id: bigint) => {
+    const h = await writeContractAsync({ chainId: base.id, address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'cancel', args: [id] });
+    await waitForTx(h);
+    window.location.reload();
+  };
+  if (!goals.length) return null;
+  return (
+    <section className="denial-notices" aria-label="denied assert requests">
+      {goals.map((g) => {
+        const { title } = splitGoalText(g.goalText);
+        return (
+          <div className="friend-card-wrap request-card denial-card" key={`denied-${g.id.toString()}`}>
+            <div className="friend-card">
+              <MiniAvatar name={profileName(g.referee, profiles)} />
+              <div>
+                <h3>{profileName(g.referee, profiles)} denied this assert</h3>
+                <p>{title}</p>
+                <b>{fmt(g.amount)} ETH ready to refund</b>
+              </div>
+            </div>
+            <div className="friend-bubble request-actions" role="group">
+              <button type="button" className="btn green" onClick={() => cancel(g.id)} disabled={isPending}>
+                {isPending ? 'cancelling…' : 'cancel · refund'}
+              </button>
+              <a href={`#g/${g.id.toString()}`} className="btn ghost view-assert">view assert →</a>
+            </div>
+          </div>
+        );
+      })}
+    </section>
   );
 }
 
@@ -1346,6 +1731,7 @@ function DisciplineHome({
   statuses,
   feed,
   friendCount,
+  profiles = {},
   onStart,
   onViewAsserts,
   onViewActivity,
@@ -1354,6 +1740,7 @@ function DisciplineHome({
   statuses: (GoalStruct | undefined)[];
   feed: SocialFeedItem[];
   friendCount: number;
+  profiles: Record<string, UserProfile>;
   onStart: () => void;
   onViewAsserts: () => void;
   onViewActivity: () => void;
@@ -1391,7 +1778,7 @@ function DisciplineHome({
             <h2 className="section-title">active asserts</h2>
             <button className="tiny-link" type="button" onClick={onViewAsserts}>view all</button>
           </div>
-          <HomeAssertCard goal={featured.g} status={featured.st ?? 0} />
+          <HomeAssertCard goal={featured.g} status={featured.st ?? 0} profiles={profiles} />
         </section>
       ) : null}
 
@@ -1446,29 +1833,55 @@ function BottomNav({ active, onSelect, pending }: { active: AppMode; onSelect: (
 
 /* ---------------- share invite ---------------- */
 
-function ShareInvite({ id, referee, onClose }: { id: bigint; referee: string; onClose: () => void }) {
+function ShareInvite({ id, referee: fallbackReferee, onClose }: { id: bigint; referee: string; onClose: () => void }) {
   const link = `${window.location.origin}${window.location.pathname}#g/${id.toString()}`;
   const [copied, setCopied] = useState(false);
+  const { data } = useReadContract({
+    chainId: base.id,
+    address: COMMITMENT_ADDRESS,
+    abi: commitmentAbi,
+    functionName: 'goals',
+    args: [id],
+  });
+  const raw = data as GoalStruct | undefined;
+  const referee = (raw?.[1] as string | undefined) || fallbackReferee || '';
+  const amount = raw?.[3];
+  const title = splitGoalText(raw?.[2] ?? 'my assert').title;
+  const hasReferee = referee.startsWith('0x') && referee !== '0x0';
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal"
+        className="modal modal-locked"
         role="dialog"
-        aria-label="invite your referee"
+        aria-label="assert locked in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-head">
-          <h2><b>LOCKED IN</b></h2>
-          <button className="modal-close" onClick={onClose} aria-label="close">×</button>
-        </div>
-        <p className="modal-sub muted">
-          send this link to <b style={{ color: 'var(--indigo)' }}>{short(referee as `0x${string}`, 6)}</b> — when
-          they open it, they'll see your assert and one-tap accept the referee role.
+        <button className="modal-close" onClick={onClose} aria-label="close">×</button>
+        <div className="locked-badge">✓</div>
+        <h2 className="locked-title"><b className="locked-gradient">LOCKED IN</b></h2>
+        <p className="modal-sub locked-line fade-up fade-up-1">
+          {amount !== undefined ? (
+            <>
+              You staked <b>{fmt(amount)} ETH</b> into contract{' '}
+              <b title={COMMITMENT_ADDRESS}>{short(COMMITMENT_ADDRESS, 6)}</b> on Base.{' '}
+            </>
+          ) : null}
+          <span className="muted">2% fee only applies when it resolves.</span>
         </p>
-        <div className="share-box">
+        <p className="modal-sub locked-line fade-up fade-up-2">
+          {hasReferee ? (
+            <>
+              When <b title={referee}>{short(referee as `0x${string}`, 6)}</b> accepts this link, they hold the
+              outcome.
+            </>
+          ) : (
+            <>Share this link so your referee can accept.</>
+          )}
+        </p>
+        <div className="share-box fade-up fade-up-3">
           <input readOnly value={link} onFocus={(e) => e.currentTarget.select()} />
           <button
-            className="btn-primary"
+            className={`btn-primary${copied ? ' copied' : ''}`}
             onClick={() => {
               navigator.clipboard?.writeText(link).catch(() => {});
               setCopied(true);
@@ -1478,7 +1891,17 @@ function ShareInvite({ id, referee, onClose }: { id: bigint; referee: string; on
             {copied ? '✓ copied' : 'copy'}
           </button>
         </div>
-        <p className="invite-copy muted" style={{ marginTop: 14 }}>
+        {amount !== undefined ? (
+          <a
+            className="btn-primary share-x-button fade-up fade-up-4"
+            href={assertShareHref({ id, title, amount, status: 0 })}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <ShareOnXLabel />
+          </a>
+        ) : null}
+        <p className="invite-copy muted fade-up fade-up-4" style={{ marginTop: 14 }}>
           or have them open <b>this app</b> — the assert will already show in their referee view.
         </p>
       </div>
@@ -1488,16 +1911,35 @@ function ShareInvite({ id, referee, onClose }: { id: bigint; referee: string; on
 
 /* ---------------- goal card ---------------- */
 
-function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focused?: boolean }) {
+function GoalCard({
+  id,
+  only,
+  focused,
+  profiles = {},
+  fallback,
+  readOnly = false,
+  followed = false,
+  onToggleFollow,
+}: {
+  id: string;
+  only?: AssertFilter;
+  focused?: boolean;
+  profiles?: Record<string, UserProfile>;
+  fallback?: { goal: CreatedArgs; status: number };
+  readOnly?: boolean;
+  followed?: boolean;
+  onToggleFollow?: (id: bigint | string) => void;
+}) {
   const { address } = useAccount();
   const { writeContractAsync, isPending } = useWriteContract();
   const { data } = useReadContract({
+    chainId: base.id,
     address: COMMITMENT_ADDRESS,
     abi: commitmentAbi,
     functionName: 'goals',
     args: [BigInt(id)],
   });
-  const raw = data as GoalStruct | undefined;
+  const raw = fallback ? toGoalStruct(fallback.goal, fallback.status) : data as GoalStruct | undefined;
   const { out, expired } = useCountdown(raw?.[5]);
   const { expired: graceOver } = useCountdown(raw?.[5] !== undefined ? raw[5] + 172800n : 0n);
   if (!raw) return null;
@@ -1523,6 +1965,7 @@ function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focu
 
   const run = async (functionName: 'acceptRole' | 'approve' | 'cancel' | 'claimReferee' | 'forfeit' | 'refundNoShow') => {
     const hash = await writeContractAsync({
+      chainId: base.id,
       address: COMMITMENT_ADDRESS,
       abi: commitmentAbi,
       functionName,
@@ -1533,9 +1976,17 @@ function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focu
   };
 
   return (
-    <div className={`card goal assert-detail-card fade-up-1${status === 1 ? ' live' : ''}`}>
+    <div className={`card goal assert-detail-card fade-up-1${status === 1 ? ' live' : ''}${isReferee ? ' referee' : ''}`}>
       <div className="goal-top assert-pass-top">
-        <span className={`status s${status}`}>{STATUS_LABEL[status]}</span>
+        <span className="goal-tags">
+          <span className={`status s${status}`}>{STATUS_LABEL[status]}</span>
+          {isReferee && (
+            <span className="referee-tag">
+              <span className="referee-tag-dot" />
+              you're the referee
+            </span>
+          )}
+        </span>
         <b>{fmt(amount)} ETH</b>
       </div>
       <p className="goal-text">{title}</p>
@@ -1546,28 +1997,28 @@ function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focu
         <div>
           {status === 0 ? (
             <>
-              <span className="state-line">Waiting on {isReferee ? 'you' : short(referee, 4)}.</span>
+              <span className="state-line">Waiting on {isReferee ? 'you' : profileName(referee, profiles)}.</span>
               <span className="state-sub">Referee must accept to activate the assert.</span>
             </>
           ) : status === 1 ? (
             <>
-              <span className="state-line">{isReferee ? 'you' : short(referee, 4)} is watching you</span>
+              <span className="state-line">{isReferee ? `you're watching ${profileName(creator, profiles)}` : `${profileName(referee, profiles)} is watching you`}</span>
               <span className="state-sub">
                 {graceOver
                   ? 'referee never called it — stake returned.'
                   : expired
                     ? 'time is up · referee has 2 days to call it'
-                    : `${out} left`} · {isReferee ? 'you' : short(referee, 4)} takes {fmt(amount)} ETH if you bail
+                    : `${out} left`} · {isReferee ? `you take ${fmt(amount)} ETH if they bail` : `${profileName(referee, profiles)} takes ${fmt(amount)} ETH if you bail`}
               </span>
             </>
           ) : status === 2 ? (
             <>
               <span className="state-line">Honored — stake returned</span>
-              <span className="state-sub">{isCreator ? 'you' : short(creator, 4)} kept their word.</span>
+              <span className="state-sub">{isCreator ? 'you' : profileName(creator, profiles)} kept their word.</span>
             </>
           ) : status === 3 ? (
             <>
-              <span className="state-line">Missed — {isReferee ? 'you' : short(referee, 4)} earned it</span>
+              <span className="state-line">Missed — {isReferee ? 'you' : profileName(referee, profiles)} earned it</span>
               <span className="state-sub">Referee collected the stake.</span>
             </>
           ) : (
@@ -1593,10 +2044,30 @@ function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focu
       )}
       {(status === 0 || status === 1) && (
         <div className="assert-risk-strip detail-risk-strip">
-          <span>Bail → {isReferee ? 'you' : short(referee, 4)} gets {fmt(refund)} ETH</span>
+          <span>Bail → {isReferee ? 'you' : profileName(referee, profiles)} gets {fmt(refund)} ETH</span>
         </div>
       )}
       <div className="goal-actions">
+        <a
+          className="btn ghost share-x-action"
+          href={assertShareHref({ id, title, amount, status })}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ShareOnXLabel />
+        </a>
+        {onToggleFollow ? (
+          <button
+            className={`btn ghost follow-toggle${followed ? ' following' : ''}`}
+            onClick={() => onToggleFollow(id)}
+          >
+            {followed ? '★ following' : '☆ follow'}
+          </button>
+        ) : null}
+        {readOnly ? (
+          <span className="muted">local preview only — no wallet or money needed</span>
+        ) : (
+          <>
         {status === 0 && isReferee && (
           <button className="btn green" onClick={() => run('acceptRole')} disabled={isPending}>
             ✓ yes, I'll referee
@@ -1635,6 +2106,8 @@ function GoalCard({ id, only, focused }: { id: string; only?: AssertFilter; focu
         {status === 4 && <span className="muted">cancelled — full refund</span>}
         {status === 1 && !isReferee && !expired && (
           <span className="muted">locked in — waiting on deadline</span>
+        )}
+          </>
         )}
       </div>
     </div>
@@ -1915,22 +2388,61 @@ function LandingSubstance() {
 /* ---------------- app ---------------- */
 
 export default function App() {
-  const { isConnected, chainId, address } = useAccount();
+  const account = useAccount();
+  const isMock = import.meta.env.DEV && new URLSearchParams(window.location.search).get('mock') === '1';
+  const previewAddress = useMemo(() => {
+    if (!import.meta.env.DEV) return undefined;
+    const value = new URLSearchParams(window.location.search).get('preview');
+    if (!value) return undefined;
+    try {
+      return getAddress(value);
+    } catch {
+      return undefined;
+    }
+  }, []);
+  const isPreview = Boolean(previewAddress) || isMock;
+  const isConnected = account.isConnected || isPreview;
+  const chainId = account.chainId ?? (isPreview ? base.id : undefined);
+  const address = isMock ? MOCK_ADDRESS : previewAddress ?? account.address;
   const { signMessageAsync } = useSignMessage();
   const [appMode, setAppMode] = useState<AppMode>(() => {
+    if (import.meta.env.DEV && (new URLSearchParams(window.location.search).has('preview') || new URLSearchParams(window.location.search).get('mock') === '1')) return 'home';
     const saved = localStorage.getItem('assert-app-mode');
     return saved === 'home' || saved === 'asserts' || saved === 'builder' || saved === 'friends' || saved === 'you'
       ? saved
       : 'intro';
   });
   const [profiles, setProfiles] = useState<Record<string, UserProfile>>(readProfiles);
+  const [refereeDenials, setRefereeDenials] = useState<StoredRefereeDenial[]>([]);
   const [draftReferee, setDraftReferee] = useState<string | undefined>();
-  const onKnownChain = chainId === 8453 || chainId === 84532;
-  const { data: allGoals } = useAllCreated();
+  const [followedIds, setFollowedIds] = useState<string[]>(() => (address ? readFollowed(address) : []));
   useEffect(() => {
-    if (!address || !hasSupabase) {
+    if (address) setFollowedIds(readFollowed(address));
+  }, [address]);
+  const toggleFollow = (id: bigint | string) => {
+    const value = id.toString();
+    if (!address) return;
+    const next = followedIds.includes(value) ? followedIds.filter((v) => v !== value) : [...followedIds, value];
+    setFollowedIds(next);
+    localStorage.setItem(FOLLOWED_KEY(address), JSON.stringify(next));
+    readStoredPreferences(address)
+      .then((stored) =>
+        saveStoredPreferences({
+          wallet_address: address,
+          dismissed_request_ids: stored?.dismissed_request_ids ?? [],
+          hidden_friend_addresses: stored?.hidden_friend_addresses ?? [],
+          followed_goal_ids: next,
+        }),
+      )
+      .catch((error) => console.warn('Supabase preferences sync failed', error));
+  };
+  const onKnownChain = isPreview || chainId === 8453 || chainId === 84532;
+  const { data: chainGoals } = useAllCreated();
+  const allGoals = isMock ? MOCK_GOALS : chainGoals;
+  useEffect(() => {
+    if (!address || !hasSupabase || isPreview) {
       setMintHook(null);
-      clearAuthToken();
+      if (!isPreview) clearAuthToken();
       return;
     }
     const wallet = address as `0x${string}`;
@@ -1939,7 +2451,7 @@ export default function App() {
     return () => {
       setMintHook(null);
     };
-  }, [address, signMessageAsync]);
+  }, [address, isPreview, signMessageAsync]);
   const profile = address ? profiles[address] ?? defaultProfile(address) : defaultProfile();
   const saveProfile = (nextProfile: UserProfile) => {
     if (!address) return;
@@ -1985,25 +2497,75 @@ export default function App() {
   // deep link: #g/<id>
   const [inviteId, setInviteId] = useState<string | null>(null);
   const [invited, setInvited] = useState<string | null>(() => {
-    const m = window.location.hash.match(/^#g\/(\d+)$/);
-    return m ? m[1] : null;
+    return readDeepLinkedGoal();
   });
   useEffect(() => {
     const onHash = () => {
-      const m = window.location.hash.match(/^#g\/(\d+)$/);
-      setInvited(m ? m[1] : null);
+      setInvited(readDeepLinkedGoal());
     };
     window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
+    window.addEventListener('popstate', onHash);
+    return () => {
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener('popstate', onHash);
+    };
   }, []);
 
   const myGoals = (allGoals ?? []).filter(
     (g) => address && (g.creator === address || g.referee === address),
   );
-  const myStatuses = useGoalsByIds(myGoals.map((g) => g.id));
+  const chainMyStatuses = useGoalsByIds(myGoals.map((g) => g.id));
+  const myStatuses = isMock ? myGoals.map((g, i) => toGoalStruct(g, i === 0 ? 1 : 0)) : chainMyStatuses;
+  useEffect(() => {
+    if (!address || !hasSupabase) {
+      setRefereeDenials([]);
+      return;
+    }
+    let cancelled = false;
+    const load = () => {
+      readRefereeDenials(address)
+        .then((rows) => {
+          if (!cancelled) setRefereeDenials(rows);
+        })
+        .catch((error) => console.warn('Supabase denial load failed', error));
+    };
+    load();
+    const interval = window.setInterval(load, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [address]);
+  const deniedGoals = useMemo(() => {
+    const rows = new Map(refereeDenials.map((d) => [d.goal_id, d]));
+    return myGoals.filter((g, i) => {
+      const row = rows.get(g.id.toString());
+      return Boolean(
+        address &&
+        g.creator.toLowerCase() === address.toLowerCase() &&
+        myStatuses[i]?.[6] === 0 &&
+        row?.creator_wallet === g.creator.toLowerCase() &&
+        row?.referee_wallet === g.referee.toLowerCase(),
+      );
+    });
+  }, [address, myGoals, myStatuses, refereeDenials]);
+  const deniedRequestIds = useMemo(() => {
+    if (!address) return new Set<string>();
+    return new Set(
+      refereeDenials
+        .filter((d) => d.referee_wallet === address.toLowerCase())
+        .map((d) => d.goal_id),
+    );
+  }, [address, refereeDenials]);
   const refereeRequests = myGoals.filter(
-    (g, i) => g.referee === address && myStatuses[i]?.[6] === 0,
+    (g, i) => g.referee === address && myStatuses[i]?.[6] === 0 && !deniedRequestIds.has(g.id.toString()),
   );
+  const addRefereeDenial = (denial: StoredRefereeDenial) => {
+    setRefereeDenials((current) => {
+      if (current.some((d) => d.goal_id === denial.goal_id)) return current;
+      return [...current, denial];
+    });
+  };
   const contacts = useMemo(() => {
     const set = new Set<`0x${string}`>();
     for (const g of allGoals ?? []) {
@@ -2020,7 +2582,8 @@ export default function App() {
     });
   }, [allGoals, contacts, address]);
   const circleStatuses = useGoalsByIds(circleGoals.map((g) => g.id));
-  const feed = activityFromGoals(circleGoals, circleStatuses, {
+  const activeCircleStatuses = isMock ? circleGoals.map((g, i) => toGoalStruct(g, i === 0 ? 1 : 0)) : circleStatuses;
+  const feed = activityFromGoals(circleGoals, activeCircleStatuses, {
     me: address,
     contacts: [...contacts],
     profiles,
@@ -2037,7 +2600,49 @@ export default function App() {
       })),
     [contacts, profiles],
   );
+  useEffect(() => {
+    if (!address || contacts.length === 0) return;
+    let cancelled = false;
+    readStoredProfiles(contacts)
+      .then((rows) => {
+        if (cancelled || !rows.length) return;
+        setProfiles((current) => {
+          const next = { ...current };
+          let changed = false;
+          for (const row of rows) {
+            try {
+              const key = getAddress(row.wallet_address);
+              const nextProfile = {
+                username: row.username || short(key, 3),
+                pfpUrl: row.pfp_url,
+                locked: row.locked,
+              };
+              if (
+                current[key]?.username !== nextProfile.username ||
+                current[key]?.pfpUrl !== nextProfile.pfpUrl ||
+                current[key]?.locked !== nextProfile.locked
+              ) {
+                next[key] = nextProfile;
+                changed = true;
+              }
+            } catch {
+              /* skip rows with unparseable wallets */
+            }
+          }
+          if (changed) {
+            localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(next));
+            return next;
+          }
+          return current;
+        });
+      })
+      .catch((error) => console.warn('Supabase contacts profile load failed', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [address, contacts, appMode]);
   const invoked = invited ? (allGoals ?? []).find((g) => g.id.toString() === invited) : undefined;
+  const invokedStatus = invoked ? myStatuses[myGoals.findIndex((g) => g.id === invoked.id)]?.[6] ?? 1 : 1;
 
   const [legalRoute, setLegalRoute] = useState<'terms' | 'privacy' | null>(() => {
     const m = window.location.hash.match(/^#\/(terms|privacy)$/);
@@ -2057,6 +2662,15 @@ export default function App() {
     setDraftReferee(friend?.address);
     setAppMode('builder');
   };
+  const startWithAddress = (address: `0x${string}`) =>
+    startBuilder({
+      name: short(address, 4),
+      role: 'peer',
+      record: '',
+      detail: short(address, 6),
+      pfp: '',
+      address,
+    });
   const selectMode = (mode: AppMode) => {
     if (mode === 'builder') setDraftReferee(undefined);
     if (invited || window.location.hash.startsWith('#g/')) {
@@ -2095,31 +2709,47 @@ export default function App() {
         </>
       ) : (
         <main>
+          <RefereeRequestNotices
+            goals={refereeRequests}
+            profiles={profiles}
+            onDenied={addRefereeDenial}
+            onViewFriends={() => selectMode('friends')}
+          />
+          <DeniedRequests goals={deniedGoals} profiles={profiles} />
           {invited ? (
-            <GoalCard id={invited} focused />
+            <GoalCard id={invited} focused profiles={profiles} fallback={invoked ? { goal: invoked, status: invokedStatus } : undefined} readOnly={isMock} followed={followedIds.includes(invited)} onToggleFollow={toggleFollow} />
           ) : null}
 
           {invited ? null : appMode === 'intro' ? (
             <ConnectedIntro onStart={() => setAppMode('home')} profile={profile} />
           ) : appMode === 'builder' ? (
             <div className="create-screen">
+              {isMock ? (
+                <div className="banner action-warning">local mock mode is read-only — use the fake assert cards to test sharing.</div>
+              ) : null}
               {!onKnownChain && (
                 <div className="banner action-warning">switch to <b>base</b> before locking an assert.</div>
               )}
-              <CreateWizard key={draftReferee ?? 'empty-referee'} initialReferee={draftReferee} contacts={contactFriends} onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />
+              {isMock ? null : <CreateWizard key={draftReferee ?? 'empty-referee'} initialReferee={draftReferee} contacts={contactFriends} onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />}
             </div>
           ) : appMode === 'asserts' ? (
-            <AssertsTab myGoals={myGoals} />
+            <AssertsTab myGoals={myGoals} profiles={profiles} statuses={myStatuses} readOnly={isMock} />
           ) : appMode === 'friends' ? (
             <FriendsTab
               requests={refereeRequests}
+              deniedGoals={deniedGoals}
               contacts={contacts}
               profiles={profiles}
               address={address}
               onStart={startBuilder}
+              onAddFriend={startWithAddress}
+              onDenied={addRefereeDenial}
               feed={feed}
               myGoals={myGoals}
               statuses={myStatuses}
+              followedIds={followedIds}
+              onToggleFollow={toggleFollow}
+              readOnly={isMock}
             />
           ) : appMode === 'you' ? (
             <ProfileTab key={address} myGoals={myGoals} profile={profile} address={address} onSave={saveProfile} />
@@ -2129,6 +2759,7 @@ export default function App() {
               statuses={myStatuses}
               feed={feed}
               friendCount={contacts.length}
+              profiles={profiles}
               onStart={() => startBuilder()}
               onViewAsserts={() => selectMode('asserts')}
               onViewActivity={() => selectMode('friends')}
@@ -2137,11 +2768,11 @@ export default function App() {
           {inviteId ? (
             <ShareInvite
               id={BigInt(inviteId)}
-              referee={invoked?.referee ?? '0x0'}
+              referee={invoked?.referee ?? ''}
               onClose={() => setInviteId(null)}
             />
           ) : null}
-          {appMode !== 'intro' || invited ? <BottomNav active={appMode} onSelect={selectMode} pending={refereeRequests.length} /> : null}
+          {appMode !== 'intro' || invited ? <BottomNav active={appMode} onSelect={selectMode} pending={refereeRequests.length + deniedGoals.length} /> : null}
         </main>
       )}
 

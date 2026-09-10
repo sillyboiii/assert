@@ -16,6 +16,7 @@
     "@walletconnect/modal": "^2.7.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "sharp": "^0.35.4",
     "viem": "^2.56.3",
     "wagmi": "^3.7.7"
   },
