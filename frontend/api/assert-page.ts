@@ -47,11 +47,12 @@ export default async function handler(req: { query?: { id?: string }; headers?: 
   const amount = goal ? `${formatEther(goal.amount)} ETH` : 'real stakes';
   const pageTitle = `Assert: ${title}`;
   const description = `Someone put ${amount} behind their word on Assert.`;
-  const image = `${origin}/api/og?id=${encodeURIComponent(id)}`;
+  const image = `${origin}/api/og?id=${encodeURIComponent(id)}&v=static-og-reference`;
   const appUrl = `${origin}/g/${encodeURIComponent(id)}`;
   const fallback = `${origin}/#g/${encodeURIComponent(id)}`;
 
   res.setHeader('content-type', 'text/html; charset=utf-8');
+  res.setHeader('cache-control', 'public, max-age=60, s-maxage=60');
   res.status(200).send(`<!doctype html>
 <html lang="en">
   <head>
