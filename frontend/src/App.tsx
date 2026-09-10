@@ -72,6 +72,7 @@ const profileName = (
 ) => (addr ? (profiles[addr] ?? profiles[addr.toLowerCase()])?.username || short(addr, 4) : '');
 const fmt = (w: bigint) => (w === 0n ? '0' : Number(formatEther(w)).toFixed(3).replace(/\.?0+$/, ''));
 const FEE_BPS = 200n; // 2% protocol fee, mirrors the live contract
+const ACCEPT_ROLE_GAS = 120_000n;
 const PROFILE_STORAGE_KEY = 'assert-profiles-v1';
 const MOCK_ADDRESS = '0xA45DE27583345d4A1357220d5FDaBE9140Ce6157' as const;
 const MOCK_REFEREE = '0x2d17E0dbcf32709A964a28074efa9528df71DEa4' as const;
@@ -1323,7 +1324,7 @@ function FriendsTab({
     }
   };
   const accept = async (id: bigint) => {
-    const h = await writeContractAsync({ chainId: base.id, address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id] });
+    const h = await writeContractAsync({ chainId: base.id, address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id], gas: ACCEPT_ROLE_GAS });
     await waitForTx(h);
     window.location.reload();
   };
@@ -1548,7 +1549,7 @@ function RefereeRequestNotices({
   const { writeContractAsync, isPending } = useWriteContract();
   const [error, setError] = useState('');
   const accept = async (id: bigint) => {
-    const h = await writeContractAsync({ chainId: base.id, address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id] });
+    const h = await writeContractAsync({ chainId: base.id, address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id], gas: ACCEPT_ROLE_GAS });
     await waitForTx(h);
     window.location.reload();
   };
@@ -1970,6 +1971,7 @@ function GoalCard({
       abi: commitmentAbi,
       functionName,
       args: [BigInt(id)],
+      ...(functionName === 'acceptRole' ? { gas: ACCEPT_ROLE_GAS } : {}),
     });
     await waitForTx(hash);
     window.location.reload();
