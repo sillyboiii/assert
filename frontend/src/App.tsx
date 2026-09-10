@@ -108,7 +108,7 @@ function toGoalStruct(goal: CreatedArgs, status = 1): GoalStruct {
 }
 
 function assertUrl(id: bigint | string) {
-  return `${window.location.origin}/g/${id.toString()}`;
+  return `${window.location.origin}/g/${id.toString()}?v=template-restored`;
 }
 
 function readDeepLinkedGoal() {
