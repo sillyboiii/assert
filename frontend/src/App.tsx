@@ -1170,6 +1170,7 @@ function HomeAssertCard({ goal, status, profiles = {} }: { goal: CreatedArgs; st
   const { address } = useAccount();
   const cd = useCountdown(goal.deadline);
   const refereeName = profileName(goal.referee, profiles);
+  const isCreator = address !== undefined && goal.creator.toLowerCase() === address.toLowerCase();
   const isReferee = address !== undefined && goal.referee.toLowerCase() === address.toLowerCase();
   const title = splitGoalText(goal.goalText).title;
   const label = status === 0 ? 'Pending' : 'Live';
@@ -1207,14 +1208,16 @@ function HomeAssertCard({ goal, status, profiles = {} }: { goal: CreatedArgs; st
       </div>
       <div className="home-assert-actions">
         <a href={`#g/${goal.id.toString()}`} className="home-assert-action">View assert →</a>
-        <a
-          href={assertShareHref({ id: goal.id, title, amount: goal.amount, status })}
-          className="home-assert-action share-action"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <ShareOnXLabel />
-        </a>
+        {isCreator ? (
+          <a
+            href={assertShareHref({ id: goal.id, title, amount: goal.amount, status })}
+            className="home-assert-action share-action"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <ShareOnXLabel />
+          </a>
+        ) : null}
       </div>
     </article>
   );
@@ -1518,6 +1521,7 @@ function FriendsTab({
               profiles={profiles}
               readOnly={readOnly}
               followed
+              compact
               onToggleFollow={onToggleFollow}
             />
           ))}
@@ -1920,6 +1924,7 @@ function GoalCard({
   fallback,
   readOnly = false,
   followed = false,
+  compact = false,
   onToggleFollow,
 }: {
   id: string;
@@ -1929,6 +1934,7 @@ function GoalCard({
   fallback?: { goal: CreatedArgs; status: number };
   readOnly?: boolean;
   followed?: boolean;
+  compact?: boolean;
   onToggleFollow?: (id: bigint | string) => void;
 }) {
   const { address } = useAccount();
@@ -1978,7 +1984,7 @@ function GoalCard({
   };
 
   return (
-    <div className={`card goal assert-detail-card fade-up-1${status === 1 ? ' live' : ''}${isReferee ? ' referee' : ''}`}>
+    <div className={`card goal assert-detail-card fade-up-1${status === 1 ? ' live' : ''}${isReferee ? ' referee' : ''}${compact ? ' compact' : ''}`}>
       <div className="goal-top assert-pass-top">
         <span className="goal-tags">
           <span className={`status s${status}`}>{STATUS_LABEL[status]}</span>
@@ -1992,9 +1998,9 @@ function GoalCard({
         <b>{fmt(amount)} ETH</b>
       </div>
       <p className="goal-text">{title}</p>
-      {focused && description ? <p className="goal-desc">{description}</p> : null}
+      {focused && description && !compact ? <p className="goal-desc">{description}</p> : null}
       {!focused ? <a className="goal-open" href={`#g/${id}`}>view assert →</a> : null}
-      <div className="home-assert-state">
+      {!compact ? <div className="home-assert-state">
         <ClockIcon />
         <div>
           {status === 0 ? (
@@ -2030,8 +2036,8 @@ function GoalCard({
             </>
           )}
         </div>
-      </div>
-      {(status === 0 || status === 1) && (
+      </div> : null}
+      {!compact && (status === 0 || status === 1) && (
         <div className="outcome-split">
           <div className="outcome win">
             <span>you hit it</span>
@@ -2050,14 +2056,16 @@ function GoalCard({
         </div>
       )}
       <div className="goal-actions">
-        <a
-          className="btn ghost share-x-action"
-          href={assertShareHref({ id, title, amount, status })}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <ShareOnXLabel />
-        </a>
+        {isCreator ? (
+          <a
+            className="btn ghost share-x-action"
+            href={assertShareHref({ id, title, amount, status })}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <ShareOnXLabel />
+          </a>
+        ) : null}
         {onToggleFollow ? (
           <button
             className={`btn ghost follow-toggle${followed ? ' following' : ''}`}
@@ -2066,7 +2074,7 @@ function GoalCard({
             {followed ? '★ following' : '☆ follow'}
           </button>
         ) : null}
-        {readOnly ? (
+        {compact ? null : readOnly ? (
           <span className="muted">local preview only — no wallet or money needed</span>
         ) : (
           <>
