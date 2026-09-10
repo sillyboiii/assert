@@ -109,16 +109,16 @@ export default async function handler(req: { query?: { id?: string } }, res: {
     </g>
   </g>
 
-  <g transform="translate(75 300)" fill="#25214f" font-family="Plus Jakarta Sans" font-size="44" font-weight="900" letter-spacing="-1.2">
+  <g transform="translate(75 300)" fill="#25214f" stroke="#25214f" stroke-width="1.4" paint-order="stroke fill" font-family="Plus Jakarta Sans" font-size="44" font-weight="900" letter-spacing="-1.2">
     ${linesSvg(headline, 0, 44, 52)}
   </g>
 
-  <g transform="translate(75 424)" fill="#25214f" font-family="Plus Jakarta Sans" font-size="40" font-weight="900" letter-spacing="-1">
+  <g transform="translate(75 424)" fill="#25214f" stroke="#25214f" stroke-width="1.2" paint-order="stroke fill" font-family="Plus Jakarta Sans" font-size="40" font-weight="900" letter-spacing="-1">
     ${linesSvg(titleLines, 0, 40, 48)}
   </g>
 
   <g transform="translate(75 500)">
-    <text fill="#6e6a8a" font-family="Plus Jakarta Sans" font-size="24" font-weight="800">${escapeXml(amount)} ETH on the line · friend referees · due ${escapeXml(due)}</text>
+    <text fill="#6e6a8a" stroke="#6e6a8a" stroke-width="0.45" paint-order="stroke fill" font-family="Plus Jakarta Sans" font-size="24" font-weight="800">${escapeXml(amount)} ETH on the line · friend referees · due ${escapeXml(due)}</text>
   </g>
 </svg>`);
   const image = await sharp(card)
