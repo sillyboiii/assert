@@ -2,7 +2,6 @@ import sharp from 'sharp';
 import { createPublicClient, formatEther, http } from 'viem';
 import { base } from 'viem/chains';
 import { commitmentAbi } from './_lib/commitment-abi.js';
-import { ogTemplatePng } from './_lib/og-template.js';
 
 const COMMITMENT_ADDRESS = '0x79E76B56318905E9A359E0Bda48816B47A6aB607';
 
@@ -62,10 +61,6 @@ async function readGoal(id: string) {
   }
 }
 
-async function readCleanedTemplate(): Promise<Buffer> {
-  return sharp(ogTemplatePng).png().toBuffer();
-}
-
 export default async function handler(req: { query?: { id?: string } }, res: {
   status: (code: number) => { send: (body: Buffer | string) => void };
   setHeader: (name: string, value: string) => void;
@@ -91,6 +86,9 @@ export default async function handler(req: { query?: { id?: string } }, res: {
       <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#405cff" flood-opacity="0.15"/>
     </filter>
   </defs>
+  <rect width="1200" height="630" fill="#f8fbff"/>
+  <circle cx="150" cy="60" r="180" fill="#eef3ff" opacity="0.6"/>
+  <circle cx="1080" cy="520" r="220" fill="#eef3ff" opacity="0.7"/>
   <g transform="translate(592 216) rotate(6.5 250 105)" filter="url(#shadow)">
     <rect x="-36" y="-36" width="572" height="282" rx="40" fill="#ffffff"/>
     <clipPath id="cardClip"><rect width="500" height="210" rx="29"/></clipPath>
@@ -111,10 +109,7 @@ export default async function handler(req: { query?: { id?: string } }, res: {
     </g>
   </g>
 </svg>`);
-  const cleaned = await readCleanedTemplate();
-  const image = await sharp(cleaned)
-    .resize(1200, 630, { fit: 'contain', background: '#f8fbff' })
-    .composite([{ input: card }])
+  const image = await sharp(card)
     .png()
     .toBuffer();
 
