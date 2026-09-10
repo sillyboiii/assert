@@ -12,8 +12,25 @@ type Goal = {
   status: number;
 };
 
+type QueryValue = string | string[] | undefined;
+
 const escapeHtml = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+function queryValue(value: QueryValue) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function passthroughQuery(query: Record<string, QueryValue> | undefined) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query ?? {})) {
+    if (key === 'id') continue;
+    const values = Array.isArray(value) ? value : value === undefined ? [] : [value];
+    for (const item of values) params.append(key, item);
+  }
+  const text = params.toString();
+  return text ? `?${text}` : '';
+}
 
 function titleFromGoal(text: string) {
   return text.split('\n\nProof standard:')[0]?.trim() || 'I just made an assert';
@@ -35,11 +52,11 @@ async function readGoal(id: string): Promise<Goal | null> {
   }
 }
 
-export default async function handler(req: { query?: { id?: string }; headers?: { host?: string } }, res: {
+export default async function handler(req: { query?: Record<string, QueryValue>; headers?: { host?: string } }, res: {
   status: (code: number) => { send: (body: string) => void };
   setHeader: (name: string, value: string) => void;
 }) {
-  const id = String(req.query?.id ?? '');
+  const id = String(queryValue(req.query?.id) ?? '');
   const host = req.headers?.host ?? 'useassert.app';
   const origin = `https://${host}`;
   const goal = await readGoal(id);
@@ -47,8 +64,8 @@ export default async function handler(req: { query?: { id?: string }; headers?: 
   const amount = goal ? `${formatEther(goal.amount)} ETH` : 'real stakes';
   const pageTitle = `Assert: ${title}`;
   const description = `Someone put ${amount} behind their word on Assert.`;
-  const image = `${origin}/og.png?v=static-og-reference`;
-  const appUrl = `${origin}/g/${encodeURIComponent(id)}`;
+  const image = `${origin}/og.png`;
+  const appUrl = `${origin}/g/${encodeURIComponent(id)}${passthroughQuery(req.query)}`;
   const fallback = `${origin}/#g/${encodeURIComponent(id)}`;
 
   res.setHeader('content-type', 'text/html; charset=utf-8');
