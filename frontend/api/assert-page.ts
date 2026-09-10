@@ -64,7 +64,7 @@ export default async function handler(req: { query?: Record<string, QueryValue>;
   const amount = goal ? `${formatEther(goal.amount)} ETH` : 'real stakes';
   const pageTitle = `Assert: ${title}`;
   const description = `Someone put ${amount} behind their word on Assert.`;
-  const image = `${origin}/og.png`;
+  const image = `${origin}/api/og?id=${encodeURIComponent(id)}&v=template-restored`;
   const appUrl = `${origin}/g/${encodeURIComponent(id)}${passthroughQuery(req.query)}`;
   const fallback = `${origin}/#g/${encodeURIComponent(id)}`;
 
