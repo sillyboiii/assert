@@ -1853,6 +1853,10 @@ img.profile-avatar {
   gap: 8px;
 }
 
+.home-assert-actions.single {
+  grid-template-columns: 1fr;
+}
+
 .home-assert-action {
   width: 100%;
   display: inline-flex;

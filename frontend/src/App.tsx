@@ -1206,7 +1206,7 @@ function HomeAssertCard({ goal, status, profiles = {} }: { goal: CreatedArgs; st
           )}
         </div>
       </div>
-      <div className="home-assert-actions">
+      <div className={`home-assert-actions${isCreator ? '' : ' single'}`}>
         <a href={`#g/${goal.id.toString()}`} className="home-assert-action">View assert →</a>
         {isCreator ? (
           <a
