@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@coinbase/wallet-sdk": "^4.3.7",
+    "@napi-rs/canvas": "^1.0.9",
     "@tanstack/react-query": "^5.102.8",
     "@walletconnect/ethereum-provider": "^2.24.0",
     "@walletconnect/modal": "^2.7.0",
