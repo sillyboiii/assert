@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import { createPublicClient, formatEther, http } from 'viem';
 import { base } from 'viem/chains';
 import { commitmentAbi } from './_lib/commitment-abi.js';
+import { FONT_BASE64, WORDMARK_BASE64 } from './_lib/og-assets.js';
 
 const COMMITMENT_ADDRESS = '0x79E76B56318905E9A359E0Bda48816B47A6aB607';
 
@@ -85,10 +86,23 @@ export default async function handler(req: { query?: { id?: string } }, res: {
     <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%">
       <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#405cff" flood-opacity="0.15"/>
     </filter>
+    <style>
+      @font-face {
+        font-family: 'Plus Jakarta Sans';
+        font-weight: 900;
+        src: url(data:font/ttf;base64,${FONT_BASE64}) format('truetype');
+      }
+      @font-face {
+        font-family: 'Plus Jakarta Sans';
+        font-weight: 800;
+        src: url(data:font/ttf;base64,${FONT_BASE64}) format('truetype');
+      }
+    </style>
   </defs>
-  <rect width="1200" height="630" fill="#f8fbff"/>
+  <rect width="1200" height="630" fill="#f7f3ea"/>
   <circle cx="150" cy="60" r="180" fill="#eef3ff" opacity="0.6"/>
   <circle cx="1080" cy="520" r="220" fill="#eef3ff" opacity="0.7"/>
+  <image href="data:image/png;base64,${WORDMARK_BASE64}" x="72" y="64" width="181" height="60" preserveAspectRatio="xMinYMin meet" opacity="0.95"/>
   <g transform="translate(592 216) rotate(6.5 250 105)" filter="url(#shadow)">
     <rect x="-36" y="-36" width="572" height="282" rx="40" fill="#ffffff"/>
     <clipPath id="cardClip"><rect width="500" height="210" rx="29"/></clipPath>
@@ -98,14 +112,14 @@ export default async function handler(req: { query?: { id?: string } }, res: {
     </g>
     <g transform="translate(28 25)">
       <rect width="114" height="34" rx="17" fill="${badgeColor}"/>
-      <text x="57" y="23" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="14.5" font-weight="900" letter-spacing="1.3">LIVE</text>
-      <text x="136" y="24" fill="#081046" font-family="Arial, sans-serif" font-size="23" font-weight="900">${escapeXml(goal?.amount ?? '0.001')} ETH</text>
+      <text x="57" y="23" text-anchor="middle" fill="#fff" font-family="Plus Jakarta Sans" font-size="14.5" font-weight="900" letter-spacing="1.3">LIVE</text>
+      <text x="136" y="24" fill="#081046" font-family="Plus Jakarta Sans" font-size="23" font-weight="900">${escapeXml(goal?.amount ?? '0.001')} ETH</text>
     </g>
-    <g transform="translate(28 94)" fill="#071044" font-family="Arial, sans-serif" font-size="30" font-weight="900" letter-spacing="-1.2">
+    <g transform="translate(28 94)" fill="#071044" font-family="Plus Jakarta Sans" font-size="30" font-weight="900" letter-spacing="-1.2">
       ${lineSvg}
     </g>
     <g transform="translate(28 178)">
-      <text fill="#747bad" font-family="Arial, sans-serif" font-size="17" font-weight="800">friend referees · due ${escapeXml(due)}</text>
+      <text fill="#747bad" font-family="Plus Jakarta Sans" font-size="17" font-weight="800">friend referees · due ${escapeXml(due)}</text>
     </g>
   </g>
 </svg>`);
