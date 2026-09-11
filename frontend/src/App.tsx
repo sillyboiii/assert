@@ -658,6 +658,11 @@ function Step3Stake({
   const max = currency === 'ETH' ? '5' : '5000';
   const step = currency === 'ETH' ? '0.01' : '1';
   const placeholder = currency === 'ETH' ? '0.1' : '300';
+  const CoinIcon = ({ coin }: { coin: StakeCurrency }) => (
+    <span className={`coin-symbol ${coin.toLowerCase()}`} aria-hidden="true">
+      {coin === 'ETH' ? '◆' : '$'}
+    </span>
+  );
   return (
     <div className="fade-up-1">
       <div className="builder-copy">
@@ -679,7 +684,8 @@ function Step3Stake({
                 setStake(c === 'ETH' ? String(eth) : String(eth * ETH_USD_PREVIEW));
               }}
             >
-              {c}
+              <CoinIcon coin={c} />
+              <span>{c}</span>
             </button>
           ))}
         </div>

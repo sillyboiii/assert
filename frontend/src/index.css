@@ -1012,9 +1012,13 @@ main {
 .currency-toggle button {
   border: 0;
   border-radius: 14px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   background: transparent;
   color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   font-weight: 900;
   letter-spacing: 0.04em;
 }
@@ -1023,6 +1027,34 @@ main {
   color: #fff;
   background: var(--blue);
   box-shadow: 0 10px 24px rgba(64, 92, 255, 0.22);
+}
+
+.coin-symbol {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1;
+  color: #fff;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.14), 0 6px 14px rgba(17, 20, 61, 0.14);
+}
+
+.coin-symbol.eth {
+  background: linear-gradient(145deg, #627eea, #243c9c);
+}
+
+.coin-symbol.usdc {
+  background: linear-gradient(145deg, #2775ca, #0f55a7);
+  font-size: 18px;
+}
+
+.currency-toggle button.on .coin-symbol {
+  background: #fff;
+  color: var(--blue);
+  box-shadow: 0 5px 14px rgba(17, 20, 61, 0.2);
 }
 
 .usdc-preview-note {
