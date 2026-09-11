@@ -64,6 +64,8 @@ type Friend = {
   address: `0x${string}`;
 };
 
+type StakeCurrency = 'ETH' | 'USDC';
+
 const short = (a: `0x${string}` | undefined, n = 4) =>
   a ? `${a.slice(0, n + 2)}…${a.slice(-n)}` : '';
 const profileName = (
@@ -73,6 +75,7 @@ const profileName = (
 const fmt = (w: bigint) => (w === 0n ? '0' : Number(formatEther(w)).toFixed(3).replace(/\.?0+$/, ''));
 const FEE_BPS = 200n; // 2% protocol fee, mirrors the live contract
 const ACCEPT_ROLE_GAS = 120_000n;
+const ETH_USD_PREVIEW = 3000;
 const PROFILE_STORAGE_KEY = 'assert-profiles-v1';
 const MOCK_ADDRESS = '0xA45DE27583345d4A1357220d5FDaBE9140Ce6157' as const;
 const MOCK_REFEREE = '0x2d17E0dbcf32709A964a28074efa9528df71DEa4' as const;
@@ -612,6 +615,9 @@ function Step2Referee({
 function Step3Stake({
   stake,
   setStake,
+  currency,
+  setCurrency,
+  localUsdcPreview,
   days,
   setDays,
   intensity,
@@ -619,6 +625,9 @@ function Step3Stake({
 }: {
   stake: string;
   setStake: (s: string) => void;
+  currency: StakeCurrency;
+  setCurrency: (c: StakeCurrency) => void;
+  localUsdcPreview: boolean;
   days: number;
   setDays: (d: number) => void;
   intensity: string;
@@ -635,11 +644,20 @@ function Step3Stake({
     { d: 14, label: '14 days' },
     { d: 30, label: '30 days' },
   ];
-  const modes = [
-    { name: 'soft mode', stake: '0.01', copy: 'prove the idea' },
-    { name: 'serious mode', stake: '0.1', copy: 'make excuses hurt' },
-    { name: 'no excuses', stake: '0.5', copy: 'this is who you are now' },
+  const baseModes = [
+    { name: 'soft mode', eth: 0.01, copy: 'prove the idea' },
+    { name: 'serious mode', eth: 0.1, copy: 'make excuses hurt' },
+    { name: 'no excuses', eth: 0.5, copy: 'this is who you are now' },
   ];
+  const modes = baseModes.map((m) => ({
+    ...m,
+    stake: currency === 'ETH' ? String(m.eth) : String(m.eth * ETH_USD_PREVIEW),
+  }));
+  const unit = currency;
+  const min = currency === 'ETH' ? '0.001' : '1';
+  const max = currency === 'ETH' ? '5' : '5000';
+  const step = currency === 'ETH' ? '0.01' : '1';
+  const placeholder = currency === 'ETH' ? '0.1' : '300';
   return (
     <div className="fade-up-1">
       <div className="builder-copy">
@@ -647,6 +665,28 @@ function Step3Stake({
         <h3>what should be on the line?</h3>
         <p className="muted">enough to matter, not enough to make the app feel weird.</p>
       </div>
+      {localUsdcPreview ? (
+        <div className="currency-toggle" role="group" aria-label="stake currency">
+          {(['ETH', 'USDC'] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={currency === c ? 'on' : ''}
+              onClick={() => {
+                setCurrency(c);
+                const selected = modes.find((m) => m.name === intensity) ?? modes[0];
+                const eth = selected.eth;
+                setStake(c === 'ETH' ? String(eth) : String(eth * ETH_USD_PREVIEW));
+              }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {localUsdcPreview && currency === 'USDC' ? (
+        <p className="muted usdc-preview-note">local preview only · USDC uses estimated ETH equivalents until V2 is wired to the app</p>
+      ) : null}
       <div className="intensity-grid">
         {modes.map((m) => (
           <button
@@ -659,7 +699,7 @@ function Step3Stake({
             }}
           >
             <span>{m.name}</span>
-            <b>{m.stake} ETH</b>
+            <b>{m.stake} {unit}</b>
             <small>{m.copy}</small>
           </button>
         ))}
@@ -669,10 +709,10 @@ function Step3Stake({
         <input
           name="stake"
           type="number"
-          step="0.01"
-          min="0.001"
-          max="5"
-          placeholder="0.1"
+          step={step}
+          min={min}
+          max={max}
+          placeholder={placeholder}
           value={stake}
           onChange={(e) => setStake(e.target.value)}
         />
@@ -695,19 +735,19 @@ function Step3Stake({
       <div className="breakdown" style={{ marginTop: 18 }}>
         <div className="breakdown-row">
           <span>you stake</span>
-          <b>{amt ? `${fmtNum(amt)} ETH` : '—'}</b>
+          <b>{amt ? `${fmtNum(amt)} ${unit}` : '—'}</b>
         </div>
         <div className="breakdown-row green">
           <span>win → back to you</span>
-          <b>{amt ? `${fmtNum(refund)} ETH` : '—'}</b>
+          <b>{amt ? `${fmtNum(refund)} ${unit}` : '—'}</b>
         </div>
         <div className="breakdown-row red">
           <span>lose → referee takes</span>
-          <b>{amt ? `${fmtNum(refund)} ETH` : '—'}</b>
+          <b>{amt ? `${fmtNum(refund)} ${unit}` : '—'}</b>
         </div>
         <div className="breakdown-row blue">
           <span>protocol fee (2%)</span>
-          <b>{amt ? `${fmtNum(fee)} ETH` : '—'}</b>
+          <b>{amt ? `${fmtNum(fee)} ${unit}` : '—'}</b>
         </div>
       </div>
     </div>
@@ -719,12 +759,14 @@ function Step4Review({
   proof,
   referee,
   stake,
+  currency,
   days,
 }: {
   goal: string;
   proof: string;
   referee: string;
   stake: string;
+  currency: StakeCurrency;
   days: number;
 }) {
   const amt = parseFloat(stake) || 0;
@@ -750,7 +792,7 @@ function Step4Review({
       <div className="review-split">
         <div>
           <span>stake</span>
-          <b>{fmtNum(amt)} ETH</b>
+          <b>{fmtNum(amt)} {currency}</b>
         </div>
         <div>
           <span>deadline</span>
@@ -758,11 +800,11 @@ function Step4Review({
         </div>
         <div>
           <span>if you hit it</span>
-          <b>{fmtNum(refund)} ETH back</b>
+          <b>{fmtNum(refund)} {currency} back</b>
         </div>
         <div>
           <span>if you fold</span>
-          <b>referee gets {fmtNum(refund)} ETH</b>
+          <b>referee gets {fmtNum(refund)} {currency}</b>
         </div>
       </div>
     </div>
@@ -775,6 +817,7 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
   const [proof, setProof] = useState('');
   const [referee, setReferee] = useState(initialReferee ?? '');
   const [stake, setStake] = useState('');
+  const [currency, setCurrency] = useState<StakeCurrency>('ETH');
   const [intensity, setIntensity] = useState('');
   const [days, setDays] = useState(7);
   const [error, setError] = useState('');
@@ -786,6 +829,7 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
   const { switchChain } = useSwitchChain();
   const isBase = chainId === base.id;
   const onTestnet = chainId === baseSepolia.id;
+  const localUsdcPreview = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
   const publicClient = usePublicClient();
 
   const stepsLabel = ['promise', 'stake', 'friend', 'proof', 'confirm'];
@@ -808,7 +852,7 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
     step === 0
       ? goal.trim().length > 0
       : step === 1
-        ? parseFloat(stake) >= 0.001
+        ? parseFloat(stake) >= (currency === 'ETH' ? 0.001 : 1)
       : step === 2
         ? refereeResult.ok && !refereeResult.ensOnly
         : step === 3
@@ -844,6 +888,10 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
         return;
       }
       const amt = Number(stake);
+      if (currency === 'USDC') {
+        setError('USDC is local UI preview only right now — V2 contract wiring is next.');
+        return;
+      }
       if (!amt || amt < 0.001) {
         setError('stake must be at least 0.001 ETH.');
         return;
@@ -977,6 +1025,9 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
         <Step3Stake
           stake={stake}
           setStake={setStake}
+          currency={currency}
+          setCurrency={setCurrency}
+          localUsdcPreview={localUsdcPreview}
           days={days}
           setDays={setDays}
           intensity={intensity}
@@ -985,7 +1036,7 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
       )}
       {step === 2 && <Step2Referee value={referee} onChange={setReferee} onResolved={setResolvedReferee} friends={contacts} />}
       {step === 3 && <Step4Proof proof={proof} setProof={setProof} />}
-      {step === 4 && <Step4Review goal={goal} proof={proof} referee={refereeResult.addr ?? referee} stake={stake} days={days} />}
+      {step === 4 && <Step4Review goal={goal} proof={proof} referee={refereeResult.addr ?? referee} stake={stake} currency={currency} days={days} />}
 
       {error && <p className="muted" style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
       {submitting && !txHash && (
