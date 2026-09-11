@@ -673,10 +673,10 @@ function Step3Stake({
       ) : (
         <svg viewBox="0 0 32 32" role="img">
           <circle cx="16" cy="16" r="16" fill="#2775ca" />
-          <path d="M11.1 8.35a8.8 8.8 0 0 0 0 15.3" fill="none" stroke="#fff" strokeWidth="2.7" strokeLinecap="round" />
-          <path d="M20.9 8.35a8.8 8.8 0 0 1 0 15.3" fill="none" stroke="#fff" strokeWidth="2.7" strokeLinecap="round" />
-          <path d="M16 7.6v16.8" stroke="#fff" strokeWidth="2.25" strokeLinecap="round" />
-          <path d="M20.3 12.15c-.7-1.45-2.18-2.05-4.12-2.05-2.35 0-4.15 1.12-4.15 3.05 0 2.18 2.08 2.72 4.02 3.1 1.5.3 2.48.58 2.48 1.55 0 .86-.86 1.45-2.38 1.45-1.58 0-2.65-.55-3.15-1.65" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+          <path d="M10.35 8.7a9.4 9.4 0 0 0 0 14.6" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
+          <path d="M21.65 8.7a9.4 9.4 0 0 1 0 14.6" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
+          <text x="16" y="21.35" textAnchor="middle" fill="#fff" fontFamily="Arial, sans-serif" fontSize="15.5" fontWeight="700">$</text>
+          <path d="M16 7.25v3.1M16 21.65v3.1" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
         </svg>
       )}
     </span>
