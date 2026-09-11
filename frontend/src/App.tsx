@@ -660,7 +660,25 @@ function Step3Stake({
   const placeholder = currency === 'ETH' ? '0.1' : '300';
   const CoinIcon = ({ coin }: { coin: StakeCurrency }) => (
     <span className={`coin-symbol ${coin.toLowerCase()}`} aria-hidden="true">
-      {coin === 'ETH' ? '◆' : '$'}
+      {coin === 'ETH' ? (
+        <svg viewBox="0 0 32 32" role="img">
+          <circle cx="16" cy="16" r="16" fill="#627eea" />
+          <path d="M16 5.5v7.75l6.55 2.93L16 5.5Z" fill="#fff" fillOpacity="0.9" />
+          <path d="M16 5.5 9.45 16.18 16 13.25V5.5Z" fill="#fff" />
+          <path d="M16 21.2v5.3l6.6-9.05L16 21.2Z" fill="#fff" fillOpacity="0.9" />
+          <path d="M16 26.5v-5.3l-6.6-3.75L16 26.5Z" fill="#fff" />
+          <path d="m16 19.98 6.55-3.8L16 13.25v6.73Z" fill="#d7e0ff" />
+          <path d="M9.45 16.18 16 19.98v-6.73l-6.55 2.93Z" fill="#edf1ff" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 32 32" role="img">
+          <circle cx="16" cy="16" r="16" fill="#2775ca" />
+          <path d="M11.1 8.35a8.8 8.8 0 0 0 0 15.3" fill="none" stroke="#fff" strokeWidth="2.7" strokeLinecap="round" />
+          <path d="M20.9 8.35a8.8 8.8 0 0 1 0 15.3" fill="none" stroke="#fff" strokeWidth="2.7" strokeLinecap="round" />
+          <path d="M16 7.6v16.8" stroke="#fff" strokeWidth="2.25" strokeLinecap="round" />
+          <path d="M20.3 12.15c-.7-1.45-2.18-2.05-4.12-2.05-2.35 0-4.15 1.12-4.15 3.05 0 2.18 2.08 2.72 4.02 3.1 1.5.3 2.48.58 2.48 1.55 0 .86-.86 1.45-2.38 1.45-1.58 0-2.65-.55-3.15-1.65" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+        </svg>
+      )}
     </span>
   );
   return (
