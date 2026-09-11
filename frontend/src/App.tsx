@@ -660,25 +660,7 @@ function Step3Stake({
   const placeholder = currency === 'ETH' ? '0.1' : '300';
   const CoinIcon = ({ coin }: { coin: StakeCurrency }) => (
     <span className={`coin-symbol ${coin.toLowerCase()}`} aria-hidden="true">
-      {coin === 'ETH' ? (
-        <svg viewBox="0 0 32 32" role="img">
-          <circle cx="16" cy="16" r="16" fill="#627eea" />
-          <path d="M16 5.5v7.75l6.55 2.93L16 5.5Z" fill="#fff" fillOpacity="0.9" />
-          <path d="M16 5.5 9.45 16.18 16 13.25V5.5Z" fill="#fff" />
-          <path d="M16 21.2v5.3l6.6-9.05L16 21.2Z" fill="#fff" fillOpacity="0.9" />
-          <path d="M16 26.5v-5.3l-6.6-3.75L16 26.5Z" fill="#fff" />
-          <path d="m16 19.98 6.55-3.8L16 13.25v6.73Z" fill="#d7e0ff" />
-          <path d="M9.45 16.18 16 19.98v-6.73l-6.55 2.93Z" fill="#edf1ff" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 32 32" role="img">
-          <circle cx="16" cy="16" r="16" fill="#2775ca" />
-          <path d="M10.35 8.7a9.4 9.4 0 0 0 0 14.6" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
-          <path d="M21.65 8.7a9.4 9.4 0 0 1 0 14.6" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
-          <text x="16" y="21.35" textAnchor="middle" fill="#fff" fontFamily="Arial, sans-serif" fontSize="15.5" fontWeight="700">$</text>
-          <path d="M16 7.25v3.1M16 21.65v3.1" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      )}
+      <img src={coin === 'ETH' ? '/eth-coin.png' : '/usdc-coin.png'} alt="" />
     </span>
   );
   return (
