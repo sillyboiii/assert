@@ -1,0 +1,254 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+interface IERC20 {
+    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+}
+
+contract CommitmentV2 {
+    enum Status { Pending, Active, Approved, Failed, Cancelled }
+
+    struct Goal {
+        address creator;
+        address referee;
+        address token;
+        string goalText;
+        uint256 amount;
+        uint256 feeAmount;
+        uint256 deadline;
+        Status status;
+    }
+
+    uint256 public constant MAX_GOAL_LENGTH = 280;
+    uint256 public constant MIN_LOCK_HOURS = 1 hours;
+    uint256 public constant MAX_LOCK_DAYS = 365 days;
+    uint256 public constant REFEREE_GRACE = 2 days;
+
+    address public immutable usdc;
+    uint256 public immutable minEthStake;
+    uint256 public immutable maxEthStake;
+    uint256 public immutable minUsdcStake;
+    uint256 public immutable maxUsdcStake;
+
+    address public owner;
+    uint256 public feeBps;
+    address public treasury;
+    uint256 public nextId;
+    mapping(uint256 => Goal) public goals;
+
+    event Created(
+        uint256 indexed id,
+        address indexed creator,
+        address indexed referee,
+        address token,
+        string goalText,
+        uint256 amount,
+        uint256 deadline
+    );
+    event RoleAccepted(uint256 indexed id, address referee);
+    event Approved(uint256 indexed id, uint256 amountToCreator);
+    event Failed(uint256 indexed id, uint256 amountToReferee);
+    event Cancelled(uint256 indexed id, uint256 refunded);
+    event FeeSent(uint256 indexed id, address recipient, address token, uint256 amount);
+
+    error NotCreator();
+    error NotReferee();
+    error SelfReferee();
+    error GoalTooLong();
+    error DeadlineOutOfRange();
+    error InvalidStake();
+    error UnsupportedToken();
+    error AlreadyStarted();
+    error NotStarted();
+    error DeadlineExpired();
+    error DeadlineNotReached();
+    error GraceExpired();
+    error GraceNotReached();
+    error TransferFailed();
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotCreator();
+        _;
+    }
+
+    constructor(
+        uint256 feeBps_,
+        address treasury_,
+        address usdc_,
+        uint256 minEthStake_,
+        uint256 maxEthStake_,
+        uint256 minUsdcStake_,
+        uint256 maxUsdcStake_
+    ) {
+        owner = msg.sender;
+        feeBps = feeBps_;
+        treasury = treasury_;
+        usdc = usdc_;
+        minEthStake = minEthStake_;
+        maxEthStake = maxEthStake_;
+        minUsdcStake = minUsdcStake_;
+        maxUsdcStake = maxUsdcStake_;
+    }
+
+    function setFee(uint256 feeBps_) external onlyOwner {
+        feeBps = feeBps_;
+    }
+
+    function setTreasury(address treasury_) external onlyOwner {
+        treasury = treasury_;
+    }
+
+    function createGoal(
+        string calldata goalText,
+        address referee,
+        uint256 deadline
+    ) external payable returns (uint256 id) {
+        _validateGoal(goalText, referee, deadline);
+        if (msg.value == 0 || msg.value < minEthStake || msg.value > maxEthStake) revert InvalidStake();
+
+        id = _storeGoal(address(0), goalText, referee, msg.value, deadline);
+    }
+
+    function createGoalWithToken(
+        string calldata goalText,
+        address referee,
+        uint256 deadline,
+        address token,
+        uint256 amount
+    ) external returns (uint256 id) {
+        _validateGoal(goalText, referee, deadline);
+        if (token != usdc) revert UnsupportedToken();
+        if (amount == 0 || amount < minUsdcStake || amount > maxUsdcStake) revert InvalidStake();
+        _safeTransferFrom(token, msg.sender, address(this), amount);
+
+        id = _storeGoal(token, goalText, referee, amount, deadline);
+    }
+
+    function acceptRole(uint256 id) external {
+        Goal storage g = goals[id];
+        if (msg.sender != g.referee) revert NotReferee();
+        if (g.status != Status.Pending) revert AlreadyStarted();
+        if (block.timestamp >= g.deadline) revert DeadlineExpired();
+
+        g.status = Status.Active;
+        emit RoleAccepted(id, msg.sender);
+    }
+
+    function approve(uint256 id) external {
+        Goal storage g = goals[id];
+        if (msg.sender != g.referee) revert NotReferee();
+        if (g.status != Status.Active) revert NotStarted();
+        if (block.timestamp > g.deadline + REFEREE_GRACE) revert DeadlineExpired();
+
+        g.status = Status.Approved;
+        _payOut(id, g.creator);
+        emit Approved(id, g.amount - g.feeAmount);
+    }
+
+    function claimReferee(uint256 id) external {
+        Goal storage g = goals[id];
+        if (msg.sender != g.referee) revert NotReferee();
+        if (g.status != Status.Active) revert NotStarted();
+        if (block.timestamp <= g.deadline) revert DeadlineNotReached();
+        if (block.timestamp > g.deadline + REFEREE_GRACE) revert GraceExpired();
+
+        g.status = Status.Failed;
+        _payOut(id, g.referee);
+        emit Failed(id, g.amount - g.feeAmount);
+    }
+
+    function forfeit(uint256 id) external {
+        Goal storage g = goals[id];
+        if (msg.sender != g.creator) revert NotCreator();
+        if (g.status != Status.Active) revert NotStarted();
+        if (block.timestamp <= g.deadline) revert DeadlineNotReached();
+        if (block.timestamp > g.deadline + REFEREE_GRACE) revert GraceExpired();
+
+        g.status = Status.Failed;
+        _payOut(id, g.referee);
+        emit Failed(id, g.amount - g.feeAmount);
+    }
+
+    function refundNoShow(uint256 id) external {
+        Goal storage g = goals[id];
+        if (msg.sender != g.creator) revert NotCreator();
+        if (g.status != Status.Active) revert NotStarted();
+        if (block.timestamp <= g.deadline + REFEREE_GRACE) revert GraceNotReached();
+
+        g.status = Status.Cancelled;
+        _transferAsset(g.token, g.creator, g.amount);
+        emit Cancelled(id, g.amount);
+    }
+
+    function cancel(uint256 id) external {
+        Goal storage g = goals[id];
+        if (msg.sender != g.creator) revert NotCreator();
+        if (g.status != Status.Pending) revert AlreadyStarted();
+
+        g.status = Status.Cancelled;
+        _transferAsset(g.token, g.creator, g.amount);
+        emit Cancelled(id, g.amount);
+    }
+
+    function _validateGoal(string calldata goalText, address referee, uint256 deadline) internal view {
+        if (referee == address(0) || referee == msg.sender) revert SelfReferee();
+        if (bytes(goalText).length == 0 || bytes(goalText).length > MAX_GOAL_LENGTH) revert GoalTooLong();
+        if (deadline < block.timestamp + MIN_LOCK_HOURS || deadline > block.timestamp + MAX_LOCK_DAYS) {
+            revert DeadlineOutOfRange();
+        }
+    }
+
+    function _storeGoal(
+        address token,
+        string calldata goalText,
+        address referee,
+        uint256 amount,
+        uint256 deadline
+    ) internal returns (uint256 id) {
+        id = nextId++;
+        goals[id] = Goal({
+            creator: msg.sender,
+            referee: referee,
+            token: token,
+            goalText: goalText,
+            amount: amount,
+            feeAmount: (amount * feeBps) / 10_000,
+            deadline: deadline,
+            status: Status.Pending
+        });
+
+        emit Created(id, msg.sender, referee, token, goalText, amount, deadline);
+    }
+
+    function _payOut(uint256 id, address beneficiary) internal {
+        Goal storage g = goals[id];
+        if (g.feeAmount > 0) {
+            _transferAsset(g.token, treasury, g.feeAmount);
+            emit FeeSent(id, treasury, g.token, g.feeAmount);
+        }
+        uint256 toBeneficiary = g.amount - g.feeAmount;
+        if (toBeneficiary > 0) _transferAsset(g.token, beneficiary, toBeneficiary);
+    }
+
+    function _transferAsset(address token, address to, uint256 amount) internal {
+        if (token == address(0)) {
+            (bool ok, ) = to.call{value: amount}("");
+            if (!ok) revert TransferFailed();
+            return;
+        }
+        _safeTransfer(token, to, amount);
+    }
+
+    function _safeTransfer(address token, address to, uint256 amount) internal {
+        (bool ok, bytes memory data) = token.call(abi.encodeCall(IERC20.transfer, (to, amount)));
+        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert TransferFailed();
+    }
+
+    function _safeTransferFrom(address token, address from, address to, uint256 amount) internal {
+        (bool ok, bytes memory data) = token.call(abi.encodeCall(IERC20.transferFrom, (from, to, amount)));
+        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert TransferFailed();
+    }
+
+    receive() external payable {}
+}
