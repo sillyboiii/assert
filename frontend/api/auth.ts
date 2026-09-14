@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { createHmac } from 'node:crypto';
 import { verifyMessage } from 'viem';
 

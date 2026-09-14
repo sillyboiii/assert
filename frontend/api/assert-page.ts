@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { createPublicClient, formatUnits, http } from 'viem';
 import { base } from 'viem/chains';
 import { commitmentAbi } from './_lib/commitment-abi.js';

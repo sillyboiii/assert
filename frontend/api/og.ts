@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import sharp from 'sharp';
 import { existsSync, writeFileSync } from 'node:fs';
 import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
