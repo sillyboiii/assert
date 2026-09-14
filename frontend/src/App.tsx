@@ -3360,7 +3360,16 @@ export default function App() {
               {!onKnownChain && (
                 <div className="banner action-warning">switch to <b>base</b> before locking an assert.</div>
               )}
-              <CreateWizard key={draftReferee ?? 'empty-referee'} initialReferee={draftReferee} contacts={contactFriends} onCreated={(key) => setInviteId(key !== '0' ? key : null)} />
+              <CreateWizard
+                key={draftReferee ?? 'empty-referee'}
+                initialReferee={draftReferee}
+                contacts={contactFriends}
+                onCreated={(key) => {
+                  if (key !== '0') setInviteId(key);
+                  setDraftReferee(undefined);
+                  setAppMode('asserts');
+                }}
+              />
             </div>
           ) : appMode === 'asserts' ? (
             <AssertsTab myGoals={myGoals} profiles={profiles} statuses={myStatuses} readOnly={isMock} />
