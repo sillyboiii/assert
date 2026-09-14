@@ -2906,9 +2906,9 @@ const LEGAL: Record<'terms' | 'privacy', { eyebrow: string; title: string; updat
       {
         heading: '3. your stake is real',
         paras: [
-          'When you assert a goal, your stake is locked onchain and is not refundable. If you hit your commitment your stake and your referee\'s stake are returned. If you miss, the pot is paid out as the rules you agreed to when you created the commitment. When a commitment ends, the referee has a two-day window to call the outcome; if they never call it, your stake is returned.',
+          'When you assert a goal, your stake is locked onchain in the currency you choose, currently ETH or USDC on Base. If you hit your commitment, your stake is returned minus the protocol fee. If you miss, your referee receives the payout according to the rules you agreed to when you created the commitment. When a commitment ends, the referee has a two-day window to call the outcome; if they never call it, your stake is returned.',
           'Transactions on Base cannot be reversed. Double-check every goal, amount, deadline and referee before you sign — there are no takebacks, by design.',
-          'The app runs on the Base network. Stakes carry real value and the same no-takebacks rule applies.',
+          'USDC asserts require an ERC-20 approval before the stake is locked. Only approve amounts you intend to use, and understand that token approvals and onchain transactions are public.',
         ],
       },
       {
@@ -2971,13 +2971,13 @@ const LEGAL: Record<'terms' | 'privacy', { eyebrow: string; title: string; updat
       {
         heading: '4. when you send a transaction',
         paras: [
-          'Your wallet sends transactions to the Base network, which may involve third-party RPC providers and wallet providers (such as Coinbase Wallet or WalletConnect). Those services have their own privacy policies and handle your data as needed to route your transactions.',
+          'Your wallet sends transactions to the Base network, which may involve third-party RPC providers and wallet providers (such as Coinbase Wallet or WalletConnect). USDC asserts also involve ERC-20 approval and transfer transactions. Those services have their own privacy policies and handle your data as needed to route your transactions.',
         ],
       },
       {
         heading: '5. blockchain is public',
         paras: [
-          'Everything you do onchain is permanently and publicly visible to anyone: your wallet address, your goals, your stakes and the outcome of each commitment. Do not assert anything you wouldn\'t be comfortable having public.',
+          'Everything you do onchain is permanently and publicly visible to anyone: your wallet address, your goals, your referee, your stake amount, the token used (ETH or USDC), approvals/transfers where applicable, and the outcome of each commitment. Do not assert anything you wouldn\'t be comfortable having public.',
         ],
       },
       {
