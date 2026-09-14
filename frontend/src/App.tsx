@@ -1797,6 +1797,11 @@ function HomeAssertCard({ goal, status, profiles = {}, compact = false, isOpen =
           </span>
         )}
         <b>{fmtAmount(goal.amount, goal.source, 3)} {unit}</b>
+        {onToggle ? (
+          <button type="button" className="home-assert-collapse" onClick={onToggle} aria-label="collapse assert">
+            <CaretIcon up />
+          </button>
+        ) : null}
       </div>
       <h3>{title}</h3>
       <div className="home-assert-state">

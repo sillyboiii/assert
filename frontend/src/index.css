@@ -2259,6 +2259,31 @@ img.profile-avatar {
   color: var(--indigo);
 }
 
+.home-assert-collapse {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border: 1px solid rgba(64, 92, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.home-assert-collapse:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  transform: translateY(-1px);
+}
+
+.home-assert-collapse svg {
+  width: 17px;
+  height: 17px;
+}
+
 .home-assert-card .live-pill {
   padding: 5px 11px;
   font-size: 10.5px;
