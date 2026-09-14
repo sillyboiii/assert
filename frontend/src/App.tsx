@@ -1415,6 +1415,31 @@ function FloatTarget() {
   );
 }
 
+function FloatCalendar() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className="entry-float-svg">
+      <rect x="10" y="12" width="28" height="28" rx="5" fill="#eef1ff" stroke="#405cff" strokeWidth="1.6" />
+      <path d="M10 20H38" stroke="#405cff" strokeWidth="1.5" />
+      <rect x="15" y="8" width="4" height="8" rx="2" fill="#405cff" />
+      <rect x="29" y="8" width="4" height="8" rx="2" fill="#405cff" />
+      <rect x="16" y="25" width="5" height="5" rx="1.5" fill="#c5cffc" />
+      <rect x="23" y="25" width="5" height="5" rx="1.5" fill="#405cff" opacity="0.72" />
+      <rect x="30" y="25" width="5" height="5" rx="1.5" fill="#c5cffc" />
+      <path d="M18 35L21 37.5L27 32" stroke="#405cff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function FloatBoltCheck() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className="entry-float-svg">
+      <path d="M27 5L11 27H23L19 43L37 19H25L27 5Z" fill="#eef1ff" stroke="#405cff" strokeWidth="1.7" strokeLinejoin="round" />
+      <circle cx="33" cy="33" r="9" fill="#fff" stroke="#405cff" strokeWidth="1.5" />
+      <path d="M29 33.5L32 36L37 29.5" stroke="#405cff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 const ENTRY_FLOATS: EntryFloatSpec[] = [
   { icon: <FloatAlarm />, cls: 'ef-1' },
   { icon: <FloatDumbbell />, cls: 'ef-2' },
@@ -1424,6 +1449,8 @@ const ENTRY_FLOATS: EntryFloatSpec[] = [
   { icon: <FloatHourglass />, cls: 'ef-6' },
   { icon: <FloatCoin />, cls: 'ef-7' },
   { icon: <FloatTarget />, cls: 'ef-8' },
+  { icon: <FloatCalendar />, cls: 'ef-9' },
+  { icon: <FloatBoltCheck />, cls: 'ef-10' },
 ];
 
 function EntryScene() {
@@ -2410,12 +2437,7 @@ function DisciplineHome({
               const isOpen = expanded.has(key);
               return (
                 <div key={key} className={`home-active-item${isOpen ? ' open' : ''}`}>
-                  <HomeAssertCard goal={g} status={st ?? 0} profiles={profiles} compact isOpen={isOpen} onToggle={() => toggle(key)} />
-                  {isOpen ? (
-                    <div className="home-active-detail">
-                      <HomeAssertCard goal={g} status={st ?? 0} profiles={profiles} />
-                    </div>
-                  ) : null}
+                  <HomeAssertCard goal={g} status={st ?? 0} profiles={profiles} compact={!isOpen} isOpen={isOpen} onToggle={() => toggle(key)} />
                 </div>
               );
             })}
