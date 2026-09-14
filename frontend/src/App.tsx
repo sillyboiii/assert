@@ -474,14 +474,14 @@ function useGoalsByIds(goals: CreatedArgs[]) {
     if (g.source === 'v2') {
       const i = v2Idx.indexOf(g.id);
       const isDeployed = COMMITMENT_V2_ADDRESS !== ZERO_ADDRESS;
-      if (!isDeployed) return toGoalStruct(g);
+      if (!isDeployed) return undefined;
       const r = v2Data[i];
-      if (!r || r.status !== 'success') return toGoalStruct(g);
+      if (!r || r.status !== 'success') return undefined;
       return v2ToGoalStruct(r.result as GoalStructV2);
     }
     const i = v1Idx.indexOf(g.id);
     const r = v1Data[i];
-    if (!r || r.status !== 'success') return toGoalStruct(g);
+    if (!r || r.status !== 'success') return undefined;
     return r.result as GoalStruct;
   });
 }
