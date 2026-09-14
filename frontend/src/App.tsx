@@ -921,7 +921,17 @@ function Step4Review({
   );
 }
 
-function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (key: string) => void; initialReferee?: string; contacts: Friend[] }) {
+function CreateWizard({
+  onCreated,
+  onCancel,
+  initialReferee,
+  contacts,
+}: {
+  onCreated: (key: string) => void;
+  onCancel: () => void;
+  initialReferee?: string;
+  contacts: Friend[];
+}) {
   const [step, setStep] = useState(0);
   const [goal, setGoal] = useState('');
   const [proof, setProof] = useState('');
@@ -1245,13 +1255,9 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (key
       )}
 
       <div className="wizard-nav">
-        {step > 0 ? (
-          <button type="button" className="btn" onClick={() => setStep((s) => s - 1)}>
-            ← back
-          </button>
-        ) : (
-          <span />
-        )}
+        <button type="button" className="btn" onClick={step > 0 ? () => setStep((s) => s - 1) : onCancel}>
+          ← back
+        </button>
         {step < 3 ? (
           <button
             type="button"
@@ -3364,6 +3370,10 @@ export default function App() {
                 key={draftReferee ?? 'empty-referee'}
                 initialReferee={draftReferee}
                 contacts={contactFriends}
+                onCancel={() => {
+                  setDraftReferee(undefined);
+                  setAppMode('home');
+                }}
                 onCreated={(key) => {
                   if (key !== '0') setInviteId(key);
                   setDraftReferee(undefined);
