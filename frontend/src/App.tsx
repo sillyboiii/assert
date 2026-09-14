@@ -94,6 +94,7 @@ const LOCAL_USDC_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as const
 const PROFILE_STORAGE_KEY = 'assert-profiles-v1';
 const MOCK_ADDRESS = '0xA45DE27583345d4A1357220d5FDaBE9140Ce6157' as const;
 const MOCK_REFEREE = '0x2d17E0dbcf32709A964a28074efa9528df71DEa4' as const;
+const EMPTY_GOALS: CreatedArgs[] = [];
 
 const commitmentV2Abi = parseAbi([
   'function nextId() view returns (uint256)',
@@ -515,6 +516,9 @@ function useAllCreated() {
             args: [BigInt(id)],
           })),
         });
+        if (!results.some((r) => r.status === 'success')) {
+          throw new Error(`failed to load ${count} goals from ${address}`);
+        }
         return results
           .map((r, id) => (r.status === 'success' ? call(r, id) : undefined))
           .filter((g): g is CreatedArgs => Boolean(g));
@@ -539,6 +543,7 @@ function useAllCreated() {
         .concat(v1)
         .sort((a, b) => (a.source === b.source ? (a.id < b.id ? 1 : -1) : a.source < b.source ? 1 : -1));
     },
+    placeholderData: (previous) => previous,
     refetchInterval: 20_000,
   });
 }
@@ -3095,7 +3100,7 @@ export default function App() {
   };
   const onKnownChain = isPreview || chainId === 8453 || chainId === 84532;
   const { data: chainGoals } = useAllCreated();
-  const allGoals = isMock ? MOCK_GOALS : chainGoals;
+  const allGoals = isMock ? MOCK_GOALS : chainGoals ?? EMPTY_GOALS;
   useEffect(() => {
     if (!address || !hasSupabase || isPreview) {
       setMintHook(null);
@@ -3168,9 +3173,10 @@ export default function App() {
     };
   }, []);
 
-  const myGoals = (allGoals ?? []).filter(
-    (g) => address && (g.creator === address || g.referee === address),
-  );
+  const myGoals = (allGoals ?? []).filter((g) => {
+    const current = address?.toLowerCase();
+    return Boolean(current && (g.creator.toLowerCase() === current || g.referee.toLowerCase() === current));
+  });
   const chainMyStatuses = useGoalsByIds(myGoals);
   const myStatuses = isMock ? myGoals.map((g, i) => toGoalStruct(g, i === 0 ? 1 : 0)) : chainMyStatuses;
   useEffect(() => {
@@ -3226,15 +3232,18 @@ export default function App() {
   const contacts = useMemo(() => {
     const set = new Set<`0x${string}`>();
     for (const g of allGoals ?? []) {
-      if (address && g.creator === address && g.referee !== address) set.add(g.referee);
-      if (address && g.referee === address && g.creator !== address) set.add(g.creator);
+      const current = address?.toLowerCase();
+      if (!current) continue;
+      if (g.creator.toLowerCase() === current && g.referee.toLowerCase() !== current) set.add(g.referee);
+      if (g.referee.toLowerCase() === current && g.creator.toLowerCase() !== current) set.add(g.creator);
     }
     return [...set];
   }, [allGoals, address]);
   const circleGoals = useMemo(() => {
     const isContact = new Set(contacts.map((c) => c.toLowerCase()));
     return (allGoals ?? []).filter((g) => {
-      if (address && (g.creator === address || g.referee === address)) return true;
+      const current = address?.toLowerCase();
+      if (current && (g.creator.toLowerCase() === current || g.referee.toLowerCase() === current)) return true;
       return isContact.has(g.creator.toLowerCase()) || isContact.has(g.referee.toLowerCase());
     });
   }, [allGoals, contacts, address]);

@@ -31,7 +31,7 @@ if (import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID) {
     }),
   );
 }
-if (import.meta.env.VITE_ENABLE_DEMO_WALLET === 'true') {
+if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_WALLET === 'true') {
   connectors.push(mock({ accounts: [import.meta.env.VITE_DEMO_ADDRESS as `0x${string}`] }));
 }
 
