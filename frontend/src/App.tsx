@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
-import { createPublicClient, getAbiItem, getAddress, http, parseUnits, formatEther } from 'viem';
+import { createPublicClient, getAbiItem, getAddress, http, parseAbi, parseUnits, formatEther, formatUnits } from 'viem';
 import { base, baseSepolia, mainnet } from 'viem/chains';
 import {
   useAccount,
@@ -15,7 +16,7 @@ import {
   type Connector,
 } from 'wagmi';
 import { commitmentAbi } from './Commitment.abi.ts';
-import { COMMITMENT_ADDRESS, STATUS_LABEL } from './lib/wagmi.ts';
+import { COMMITMENT_ADDRESS, COMMITMENT_V2_ADDRESS, USDC_ADDRESS, STATUS_LABEL, localAnvil } from './lib/wagmi.ts';
 import { waitForTx } from './lib/tx.ts';
 import { clearAuthToken, ensureAuthToken, mintAuthToken, setMintHook } from './lib/auth.ts';
 import {
@@ -40,8 +41,22 @@ type GoalStruct = [
   status: number,
 ];
 
+type GoalSource = 'v1' | 'v2';
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+const goalKey = (id: bigint | string, source: GoalSource) => (source === 'v2' ? `v2-${id}` : `${id}`);
+const splitGoalKey = (key: string): { source: GoalSource; id: bigint } => {
+  if (key.startsWith('v2-')) return { source: 'v2', id: BigInt(key.slice(3)) };
+  return { source: 'v1', id: BigInt(key) };
+};
+const fmtAmount = (w: bigint, source: GoalSource, decimals = 2) =>
+  (Number(formatUnits(w, source === 'v2' ? 6 : 18))).toFixed(source === 'v2' ? decimals : 3).replace(/\.?0+$/, '');
+const unitOf = (source: GoalSource) => (source === 'v2' ? 'USDC' : 'ETH');
+
 type CreatedArgs = {
   id: bigint;
+  source: GoalSource;
   creator: `0x${string}`;
   referee: `0x${string}`;
   goalText: string;
@@ -72,17 +87,52 @@ const profileName = (
   addr: `0x${string}` | undefined,
   profiles: Record<string, UserProfile> = {},
 ) => (addr ? (profiles[addr] ?? profiles[addr.toLowerCase()])?.username || short(addr, 4) : '');
-const fmt = (w: bigint) => (w === 0n ? '0' : Number(formatEther(w)).toFixed(3).replace(/\.?0+$/, ''));
 const FEE_BPS = 200n; // 2% protocol fee, mirrors the live contract
 const ACCEPT_ROLE_GAS = 120_000n;
-const ETH_USD_PREVIEW = 3000;
+const LOCAL_COMMITMENT_V2_ADDRESS = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as const;
+const LOCAL_USDC_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as const;
 const PROFILE_STORAGE_KEY = 'assert-profiles-v1';
 const MOCK_ADDRESS = '0xA45DE27583345d4A1357220d5FDaBE9140Ce6157' as const;
 const MOCK_REFEREE = '0x2d17E0dbcf32709A964a28074efa9528df71DEa4' as const;
 
+const commitmentV2Abi = parseAbi([
+  'function nextId() view returns (uint256)',
+  'function createGoalWithToken(string goalText, address referee, uint256 deadline, address token, uint256 amount) returns (uint256)',
+  'function goals(uint256) view returns (address creator, address referee, address token, string goalText, uint256 amount, uint256 feeAmount, uint256 deadline, uint8 status)',
+  'function acceptRole(uint256 id)',
+  'function approve(uint256 id)',
+  'function claimReferee(uint256 id)',
+  'function forfeit(uint256 id)',
+  'function refundNoShow(uint256 id)',
+  'function cancel(uint256 id)',
+  'event Created(uint256 indexed id, address indexed creator, address indexed referee, address token, string goalText, uint256 amount, uint256 deadline)',
+]);
+
+type GoalStructV2 = [
+  creator: `0x${string}`,
+  referee: `0x${string}`,
+  token: `0x${string}`,
+  goalText: string,
+  amount: bigint,
+  fee: bigint,
+  deadline: bigint,
+  status: number,
+];
+
+// V2's struct has token inserted at index 2; fold it back into the V1 GoalStruct shape.
+const v2ToGoalStruct = (raw: GoalStructV2): GoalStruct => [raw[0], raw[1], raw[3], raw[4], raw[5], raw[6], raw[7]];
+
+const erc20TestAbi = parseAbi([
+  'function balanceOf(address owner) view returns (uint256)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+  'function mint(address to, uint256 amount)',
+]);
+
 const MOCK_GOALS: CreatedArgs[] = [
   {
     id: 9001n,
+    source: 'v1',
     creator: MOCK_ADDRESS,
     referee: MOCK_REFEREE,
     goalText: 'wake up before 7am every day for 21 days\n\nProof standard: morning check-in message',
@@ -91,10 +141,20 @@ const MOCK_GOALS: CreatedArgs[] = [
   },
   {
     id: 9002n,
+    source: 'v1',
     creator: MOCK_ADDRESS,
     referee: MOCK_REFEREE,
     goalText: 'ship one meaningful product update this week\n\nProof standard: live link and public changelog',
     amount: parseUnits('0.005', 18),
+    deadline: BigInt(Math.floor(Date.now() / 1000) + 7 * 86400),
+  },
+  {
+    id: 9003n,
+    source: 'v2',
+    creator: MOCK_ADDRESS,
+    referee: MOCK_REFEREE,
+    goalText: 'save $100 before next friday\n\nProof standard: savings screenshot every friday',
+    amount: parseUnits('100', 6),
     deadline: BigInt(Math.floor(Date.now() / 1000) + 7 * 86400),
   },
 ];
@@ -111,27 +171,29 @@ function toGoalStruct(goal: CreatedArgs, status = 1): GoalStruct {
   ];
 }
 
-function assertUrl(id: bigint | string) {
-  return `${window.location.origin}/g/${id.toString()}?v=template-restored`;
+function assertUrl(id: bigint | string, source: GoalSource) {
+  return `${window.location.origin}/g/${goalKey(id, source)}?v=template-restored`;
 }
 
 function readDeepLinkedGoal() {
-  const hash = window.location.hash.match(/^#g\/(\d+)$/);
-  if (hash) return hash[1];
-  const path = window.location.pathname.match(/^\/g\/(\d+)$/);
-  return path ? path[1] : null;
+  const hash = window.location.hash.match(/^#g\/(v2-)?(\d+)$/);
+  if (hash) return hash[1] ? `${hash[1]}${hash[2]}` : hash[2];
+  const path = window.location.pathname.match(/^\/g\/(v2-)?(\d+)$/);
+  if (path) return path[1] ? `${path[1]}${path[2]}` : path[2];
+  return null;
 }
 
-function assertShareHref({ id, title, amount, status }: { id: bigint | string; title: string; amount: bigint; status: number }) {
+function assertShareHref({ id, title, amount, status, source }: { id: bigint | string; title: string; amount: bigint; status: number; source: GoalSource }) {
+  const unit = unitOf(source);
   const line = status === 2
     ? `I kept my word on Assert: "${title}".`
     : status === 1
-      ? `I put ${fmt(amount)} ETH on this assert: "${title}".`
+      ? `I put ${fmtAmount(amount, source, 3)} ${unit} on this assert: "${title}".`
       : status === 0
         ? `I just made an assert: "${title}".`
         : `I put my word onchain with Assert: "${title}".`;
   const text = `${line}\n\nNo streaks. No badges. Real accountability.`;
-  return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(assertUrl(id))}`;
+  return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(assertUrl(id, source))}`;
 }
 
 function XLogo() {
@@ -206,8 +268,25 @@ function useCountdown(deadline: bigint | undefined) {
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
-  const out = d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m ${String(s % 60).padStart(2, '0')}s`;
+  const out = d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
   return { out, urgent, expired: ms <= 0 };
+}
+
+function useEthPriceUsd(): number | null {
+  const [price, setPrice] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        if (!cancelled && d?.ethereum?.usd != null) setPrice(Number(d.ethereum.usd));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return price;
 }
 
 const mainnetClient = createPublicClient({
@@ -360,31 +439,58 @@ function ConnectButton({ label = 'Connect wallet' }: { label?: string }) {
       <button className="btn-primary" onClick={() => setOpen(true)}>
         {label}
       </button>
-      {open && <ConnectModal onClose={() => setOpen(false)} />}
+      {open && createPortal(<ConnectModal onClose={() => setOpen(false)} />, document.body)}
     </div>
   );
 }
 
 /* ---------------- data hook: all created goals ---------------- */
 
-function useGoalsByIds(ids: bigint[]) {
-  const { data } = useReadContracts({
+function useGoalsByIds(goals: CreatedArgs[]) {
+  const v1Idx = goals.map((g) => (g.source === 'v1' ? g.id : undefined)).filter((x): x is bigint => x !== undefined);
+  const v2Idx = goals.map((g) => (g.source === 'v2' ? g.id : undefined)).filter((x): x is bigint => x !== undefined);
+  const v1 = useReadContracts({
     chainId: base.id,
-    contracts: ids.map((id) => ({
+    contracts: v1Idx.map((id) => ({
       address: COMMITMENT_ADDRESS,
       abi: commitmentAbi,
       functionName: 'goals' as const,
       args: [id],
     })),
   });
-  return (data ?? []).map((r) => r.result as GoalStruct | undefined);
+  const v2 = useReadContracts({
+    chainId: base.id,
+    contracts: v2Idx.map((id) => ({
+      address: COMMITMENT_V2_ADDRESS,
+      abi: commitmentV2Abi,
+      functionName: 'goals' as const,
+      args: [id],
+    })),
+  });
+  const v1Data = v1.data ?? [];
+  const v2Data = v2.data ?? [];
+  return goals.map((g) => {
+    if (g.source === 'v2') {
+      const i = v2Idx.indexOf(g.id);
+      const isDeployed = COMMITMENT_V2_ADDRESS !== ZERO_ADDRESS;
+      if (!isDeployed) return toGoalStruct(g);
+      const r = v2Data[i];
+      if (!r || r.status !== 'success') return toGoalStruct(g);
+      return v2ToGoalStruct(r.result as GoalStructV2);
+    }
+    const i = v1Idx.indexOf(g.id);
+    const r = v1Data[i];
+    if (!r || r.status !== 'success') return toGoalStruct(g);
+    return r.result as GoalStruct;
+  });
 }
 
 function useAllCreated() {
   const publicClient = usePublicClient({ chainId: base.id });
   const chainId = publicClient?.chain.id;
+  const v2Deployed = COMMITMENT_V2_ADDRESS !== ZERO_ADDRESS;
   return useQuery({
-    queryKey: ['allCreated', chainId],
+    queryKey: ['allCreated', chainId, v2Deployed],
     queryFn: async () => {
       if (!publicClient) return [];
       const nextId = await publicClient.readContract({
@@ -393,24 +499,45 @@ function useAllCreated() {
         functionName: 'nextId',
       }) as bigint;
       const total = Number(nextId);
-      if (!total) return [];
-      const results = await publicClient.multicall({
-        allowFailure: true,
-        contracts: Array.from({ length: total }, (_, id) => ({
-          address: COMMITMENT_ADDRESS,
-          abi: commitmentAbi,
-          functionName: 'goals' as const,
-          args: [BigInt(id)],
-        })),
+      const readGoals = async (
+        address: `0x${string}`,
+        abi: typeof commitmentAbi | typeof commitmentV2Abi,
+        count: number,
+        call: (r: { status: string; result: unknown }, id: number) => CreatedArgs | undefined,
+      ): Promise<CreatedArgs[]> => {
+        if (!count) return [];
+        const results = await publicClient.multicall({
+          allowFailure: true,
+          contracts: Array.from({ length: count }, (_, id) => ({
+            address,
+            abi,
+            functionName: 'goals' as const,
+            args: [BigInt(id)],
+          })),
+        });
+        return results
+          .map((r, id) => (r.status === 'success' ? call(r, id) : undefined))
+          .filter((g): g is CreatedArgs => Boolean(g));
+      };
+      const v1 = await readGoals(COMMITMENT_ADDRESS, commitmentAbi, total, (r, id) => {
+        const [creator, referee, goalText, amount, , deadline] = r.result as GoalStruct;
+        return { id: BigInt(id), source: 'v1', creator, referee, goalText, amount, deadline };
       });
-      return results
-        .map((r, id) => {
-          if (r.status !== 'success') return undefined;
-          const [creator, referee, goalText, amount, , deadline] = r.result as GoalStruct;
-          return { id: BigInt(id), creator, referee, goalText, amount, deadline };
-        })
-        .filter((g): g is CreatedArgs => Boolean(g))
-        .sort((a, b) => (a.id < b.id ? 1 : -1));
+      let v2: CreatedArgs[] = [];
+      if (v2Deployed) {
+        const v2Total = Number(await publicClient.readContract({
+          address: COMMITMENT_V2_ADDRESS,
+          abi: commitmentV2Abi,
+          functionName: 'nextId',
+        }) as bigint);
+        v2 = await readGoals(COMMITMENT_V2_ADDRESS, commitmentV2Abi, v2Total, (r, id) => {
+          const [creator, referee, , goalText, amount, , deadline] = r.result as GoalStructV2;
+          return { id: BigInt(id), source: 'v2', creator, referee, goalText, amount, deadline };
+        });
+      }
+      return v2
+        .concat(v1)
+        .sort((a, b) => (a.source === b.source ? (a.id < b.id ? 1 : -1) : a.source < b.source ? 1 : -1));
     },
     refetchInterval: 20_000,
   });
@@ -428,34 +555,34 @@ const ASSERT_TEMPLATES = [
 function Step1Goal({
   goal,
   setGoal,
+  proof,
+  setProof,
 }: {
   goal: string;
   setGoal: (v: string) => void;
+  proof: string;
+  setProof: (v: string) => void;
 }) {
   return (
     <div className="fade-up-1">
       <div className="builder-copy">
-        <span className="eyebrow">new assert</span>
-        <h3>what are you putting out there?</h3>
-        <p className="muted">keep it simple. your friend should know exactly what counts.</p>
+        <span className="eyebrow">the promise</span>
+        <h3>what are you putting on the line?</h3>
       </div>
-      <label>
-        promise
-        <div className="textarea-shell">
-          <textarea
-            className="goal-input"
-            name="goal"
-            maxLength={280}
-            rows={3}
-            placeholder="train 4x a week for 30 days…"
-            value={goal}
-            onChange={(e) => setGoal(e.target.value)}
-            autoFocus
-          />
-          <span className="char-count">{goal.length}/280</span>
-        </div>
-      </label>
-      <div className="template-grid">
+      <div className="textarea-shell goal-shell">
+        <textarea
+          className="goal-input"
+          name="goal"
+          maxLength={280}
+          rows={3}
+          placeholder="train 4x a week for 30 days…"
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
+          autoFocus
+        />
+        <span className="char-count">{goal.length}/280</span>
+      </div>
+      <div className="template-row">
         {ASSERT_TEMPLATES.map((t) => (
           <button
             key={t.label}
@@ -463,40 +590,14 @@ function Step1Goal({
             className="template-chip"
             onClick={() => {
               setGoal(t.goal);
+              if (!proof.trim()) setProof(t.proof);
             }}
           >
             <span>{t.label}</span>
-            <b>{t.goal}</b>
+            <b>→</b>
           </button>
         ))}
       </div>
-    </div>
-  );
-}
-
-function Step4Proof({ proof, setProof }: { proof: string; setProof: (v: string) => void }) {
-  return (
-    <div className="fade-up-1">
-      <div className="builder-copy">
-        <span className="eyebrow">proof</span>
-        <h3>how does your friend verify it?</h3>
-        <p className="muted">screenshots, check-ins, photos, links. make the call easy.</p>
-      </div>
-      <label className="proof-label">
-        proof
-        <div className="textarea-shell">
-          <textarea
-            className="goal-input proof-input"
-            name="proof"
-            maxLength={180}
-            rows={2}
-            placeholder="screenshots, check-ins, photos, a shipped link…"
-            value={proof}
-            onChange={(e) => setProof(e.target.value)}
-          />
-          <span className="char-count">{proof.length}/180</span>
-        </div>
-      </label>
     </div>
   );
 }
@@ -506,16 +607,19 @@ function Step2Referee({
   onChange,
   onResolved,
   friends,
+  proof,
+  setProof,
 }: {
   value: string;
   onChange: (v: string) => void;
   onResolved: (addr: `0x${string}` | null) => void;
   friends: Friend[];
+  proof: string;
+  setProof: (v: string) => void;
 }) {
   const [resolved, setResolved] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
-  const [showFriends, setShowFriends] = useState(false);
-  const selectedFriend = friends.find((friend) => friend.address.toLowerCase() === value.trim().toLowerCase());
+  const [pickFriends, setPickFriends] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -527,11 +631,16 @@ function Step2Referee({
       mainnetClient
         .getEnsAddress({ name: raw as `${string}.eth` })
         .then((addr) => {
-          alive && setResolved(addr ?? null);
-          alive && onResolved((addr ?? null) as `0x${string}` | null);
+          if (!alive) return;
+          setResolved(addr ?? null);
+          onResolved((addr ?? null) as `0x${string}` | null);
         })
-        .catch(() => alive && onResolved(null))
-        .finally(() => alive && setResolving(false));
+        .catch(() => {
+          if (alive) onResolved(null);
+        })
+        .finally(() => {
+          if (alive) setResolving(false);
+        });
     }
     return () => {
       alive = false;
@@ -558,56 +667,82 @@ function Step2Referee({
   return (
     <div className="fade-up-1">
       <div className="builder-copy">
-        <span className="eyebrow">friend</span>
-        <h3>who calls it?</h3>
-        <p className="muted">pick from your circle or paste a wallet. choose someone who won’t let you wiggle out.</p>
+        <span className="eyebrow">accountability</span>
+        <h3>who’s holding you to it?</h3>
+        <p className="muted">they call the shots on your proof. pick a friend who won’t let you slide.</p>
       </div>
-      <label>
-        choose a friend
-        <div className="referee-picker-wrap">
-          <button type="button" className="referee-picker-trigger" onClick={() => setShowFriends((open) => !open)}>
-            {selectedFriend ? (
-              <><MiniAvatar name={selectedFriend.name} src={selectedFriend.pfp} />{selectedFriend.name}</>
-            ) : (
-              <><MiniAvatar name="friend" />friends</>
-            )}
-          </button>
-          <input
-            name="referee"
-            placeholder="friend.eth or 0x1234…"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-          />
-          {showFriends ? (
-            <div className="friend-bubble referee-bubble" role="menu">
-              {friends.map((friend) => (
+      {pickFriends ? (
+        friends.length > 0 ? (
+          <div className="friend-choice-list">
+            {friends.map((friend) => {
+              const isOn = friend.address.toLowerCase() === value.trim().toLowerCase();
+              return (
                 <button
-                  key={friend.name}
+                  key={friend.address}
                   type="button"
+                  className={`friend-choice${isOn ? ' on' : ''}`}
                   onClick={() => {
                     onChange(friend.address);
-                    setShowFriends(false);
+                    onResolved(friend.address);
                   }}
                 >
                   <MiniAvatar name={friend.name} src={friend.pfp} />
-                  <span><b>{friend.name}</b><small>{friend.role} · {friend.record}</small></span>
+                  <span className="friend-choice-body">
+                    <b>{friend.name}</b>
+                    <small>{friend.role}</small>
+                  </span>
+                  {isOn ? <i>✓</i> : null}
                 </button>
-              ))}
-            </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="empty-copy">no friends in your circle yet — tell us who’s holding you accountable below.</p>
+        )
+      ) : (
+        <>
+          <div className="referee-picker-wrap">
+            <input
+              className="referee-address-input"
+              name="referee"
+              placeholder="friend.eth or 0x1234…"
+              inputMode="text"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+            />
+          </div>
+          {resolving ? <p className="ens-hint">resolving ens…</p> : null}
+          {resolved ? <p className="ens-hint">✓ resolved → {short(addr)}</p> : null}
+          {value.trim() && !valid && !resolving ? (
+            <p className="muted" style={{ fontSize: 12 }}>
+              that doesn't look like a valid wallet address yet
+            </p>
           ) : null}
-        </div>
-      </label>
-      {resolving && <p className="ens-hint">resolving ens…</p>}
-      {resolved && <p className="ens-hint">✓ resolved → {short(addr)}</p>}
+        </>
+      )}
+      <div className="referee-manual">
+        <button type="button" className="toggle-address" onClick={() => setPickFriends((open) => !open)}>
+          {pickFriends ? 'or paste a wallet / ens instead' : '← pick a friend instead'}
+        </button>
+      </div>
       <div className="referee-suggest">
-        <span>send it to someone who will actually call you out</span>
+        <span>they decide if you actually did it</span>
         <span>you'll get a link to share after you lock it in</span>
       </div>
-      {value.trim() && !valid && !resolving && (
-        <p className="muted" style={{ fontSize: 12 }}>
-          that doesn't look like a valid wallet address yet
-        </p>
-      )}
+      <div className="builder-copy sub accountability-proof-copy">
+        <span className="eyebrow tiny">proof standard</span>
+        <p className="muted">how will they call it?</p>
+      </div>
+      <div className="textarea-shell proof-shell">
+        <input
+          className="proof-input-inline"
+          name="proof"
+          maxLength={120}
+          placeholder="weekly gym pics, a shipped link, check-ins…"
+          value={proof}
+          onChange={(e) => setProof(e.target.value)}
+        />
+      </div>
     </div>
   );
 }
@@ -617,22 +752,19 @@ function Step3Stake({
   setStake,
   currency,
   setCurrency,
-  localUsdcPreview,
+  usdcEnabled,
   days,
   setDays,
-  intensity,
-  setIntensity,
 }: {
   stake: string;
   setStake: (s: string) => void;
   currency: StakeCurrency;
   setCurrency: (c: StakeCurrency) => void;
-  localUsdcPreview: boolean;
+  usdcEnabled: boolean;
   days: number;
   setDays: (d: number) => void;
-  intensity: string;
-  setIntensity: (v: string) => void;
 }) {
+  const [showDetails, setShowDetails] = useState(false);
   const amt = parseFloat(stake) || 0;
   const fee = (amt * Number(FEE_BPS)) / 10_000;
   const refund = amt - fee;
@@ -644,20 +776,12 @@ function Step3Stake({
     { d: 14, label: '14 days' },
     { d: 30, label: '30 days' },
   ];
-  const baseModes = [
-    { name: 'soft mode', eth: 0.01, copy: 'prove the idea' },
-    { name: 'serious mode', eth: 0.1, copy: 'make excuses hurt' },
-    { name: 'no excuses', eth: 0.5, copy: 'this is who you are now' },
-  ];
-  const modes = baseModes.map((m) => ({
-    ...m,
-    stake: currency === 'ETH' ? String(m.eth) : String(m.eth * ETH_USD_PREVIEW),
-  }));
   const unit = currency;
   const min = currency === 'ETH' ? '0.001' : '1';
   const max = currency === 'ETH' ? '5' : '5000';
   const step = currency === 'ETH' ? '0.01' : '1';
   const placeholder = currency === 'ETH' ? '0.1' : '300';
+  const quickAmounts = currency === 'ETH' ? ['0.01', '0.05', '0.1', '0.25'] : ['5', '10', '50', '100'];
   const CoinIcon = ({ coin }: { coin: StakeCurrency }) => (
     <span className={`coin-symbol ${coin.toLowerCase()}`} aria-hidden="true">
       <img src={coin === 'ETH' ? '/eth-coin.png' : '/usdc-coin.png'} alt="" />
@@ -667,62 +791,55 @@ function Step3Stake({
     <div className="fade-up-1">
       <div className="builder-copy">
         <span className="eyebrow">stake</span>
-        <h3>what should be on the line?</h3>
-        <p className="muted">enough to matter, not enough to make the app feel weird.</p>
+        <h3>how much are you putting on it?</h3>
+        <p className="muted">make the amount the commitment.</p>
       </div>
-      {localUsdcPreview ? (
-        <div className="currency-toggle" role="group" aria-label="stake currency">
-          {(['ETH', 'USDC'] as const).map((c) => (
-            <button
-              key={c}
-              type="button"
-              className={currency === c ? 'on' : ''}
-              onClick={() => {
-                setCurrency(c);
-                const selected = modes.find((m) => m.name === intensity) ?? modes[0];
-                const eth = selected.eth;
-                setStake(c === 'ETH' ? String(eth) : String(eth * ETH_USD_PREVIEW));
-              }}
-            >
-              <CoinIcon coin={c} />
-              <span>{c}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {localUsdcPreview && currency === 'USDC' ? (
-        <p className="muted usdc-preview-note">local preview only · USDC uses estimated ETH equivalents until V2 is wired to the app</p>
-      ) : null}
-      <div className="intensity-grid">
-        {modes.map((m) => (
+      <div className="currency-toggle" role="group" aria-label="stake currency">
+        {(['ETH', 'USDC'] as const).map((c) => (
           <button
-            key={m.name}
+            key={c}
             type="button"
-            className={`intensity-card${intensity === m.name ? ' on' : ''}`}
-            onClick={() => {
-              setIntensity(m.name);
-              setStake(m.stake);
-            }}
+            className={currency === c ? 'on' : ''}
+            onClick={() => setCurrency(c)}
           >
-            <span>{m.name}</span>
-            <b>{m.stake} {unit}</b>
-            <small>{m.copy}</small>
+            <CoinIcon coin={c} />
+            <span>{c}</span>
           </button>
         ))}
       </div>
-      <label>
-        amount
-        <input
-          name="stake"
-          type="number"
-          step={step}
-          min={min}
-          max={max}
-          placeholder={placeholder}
-          value={stake}
-          onChange={(e) => setStake(e.target.value)}
-        />
-      </label>
+      <div className="amount-pressure">
+        <div className="amount-row">
+          <input
+            name="stake"
+            type="number"
+            inputMode="decimal"
+            step={step}
+            min={min}
+            max={max}
+            placeholder={placeholder}
+            value={stake}
+            onChange={(e) => setStake(e.target.value)}
+            className="stake-amount-input"
+            aria-label={`stake amount in ${currency}`}
+          />
+          <span className="stake-unit">{unit}</span>
+        </div>
+        {usdcEnabled && currency === 'USDC' ? (
+          <p className="muted usdc-preview-note">settles in real USDC on base.</p>
+        ) : null}
+      </div>
+      <div className="quick-amount-row" aria-label="quick stake amounts">
+        {quickAmounts.map((amount) => (
+          <button
+            key={amount}
+            type="button"
+            className={`quick-amount${stake === amount ? ' on' : ''}`}
+            onClick={() => setStake(amount)}
+          >
+            {amount} {unit}
+          </button>
+        ))}
+      </div>
       <label style={{ marginTop: 14 }}>
         deadline
         <div className="deadline-chips">
@@ -738,23 +855,27 @@ function Step3Stake({
           ))}
         </div>
       </label>
-      <div className="breakdown" style={{ marginTop: 18 }}>
-        <div className="breakdown-row">
-          <span>you stake</span>
-          <b>{amt ? `${fmtNum(amt)} ${unit}` : '—'}</b>
-        </div>
-        <div className="breakdown-row green">
-          <span>win → back to you</span>
-          <b>{amt ? `${fmtNum(refund)} ${unit}` : '—'}</b>
-        </div>
-        <div className="breakdown-row red">
-          <span>lose → referee takes</span>
-          <b>{amt ? `${fmtNum(refund)} ${unit}` : '—'}</b>
-        </div>
-        <div className="breakdown-row blue">
-          <span>protocol fee (2%)</span>
-          <b>{amt ? `${fmtNum(fee)} ${unit}` : '—'}</b>
-        </div>
+      <div className="stake-details">
+        <button type="button" className="stake-details-toggle" onClick={() => setShowDetails((open) => !open)}>
+          <span>what actually happens</span>
+          <small>{showDetails ? 'hide' : 'show'} ↓</small>
+        </button>
+        {showDetails ? (
+          <div className="breakdown">
+            <div className="breakdown-row green">
+              <span>keep your word → money comes back</span>
+              <b>{amt ? `${fmtNum(refund)} ${unit}` : '—'}</b>
+            </div>
+            <div className="breakdown-row red">
+              <span>bail → friend takes it</span>
+              <b>{amt ? `${fmtNum(refund)} ${unit}` : '—'}</b>
+            </div>
+            <div className="breakdown-row blue">
+              <span>protocol fee (2%)</span>
+              <b>{amt ? `${fmtNum(fee)} ${unit}` : '—'}</b>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -775,70 +896,56 @@ function Step4Review({
   currency: StakeCurrency;
   days: number;
 }) {
+  const [createdAt] = useState(() => Date.now());
   const amt = parseFloat(stake) || 0;
-  const fee = (amt * Number(FEE_BPS)) / 10_000;
-  const refund = amt - fee;
   const fmtNum = (n: number) => String(n.toFixed(3)).replace(/\.?0+$/, '');
+  const deadline = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
+    new Date(createdAt + days * 86400 * 1000),
+  );
+  const refereeLabel = referee.startsWith('0x') ? `@${short(referee as `0x${string}`, 4)}` : `@${referee}`;
   return (
     <div className="review-card fade-up-1">
       <span className="eyebrow">send assert</span>
-      <h3>ready to send this to your friend?</h3>
-      <div className="review-line big">
-        <span>i assert</span>
-        <b>{goal}</b>
-      </div>
-      <div className="review-line">
-        <span>proof</span>
-        <b>{proof}</b>
-      </div>
-      <div className="review-line">
-        <span>referee</span>
-        <b>{referee}</b>
-      </div>
-      <div className="review-split">
-        <div>
-          <span>stake</span>
-          <b>{fmtNum(amt)} {currency}</b>
+      <h3>ready to make it real?</h3>
+      <article className="assert-review-card">
+        <span className="assert-review-kicker">i assert</span>
+        <h4>{goal}</h4>
+        <div className="assert-review-meta">
+          <span><b>{fmtNum(amt)} {currency}</b> on the line</span>
+          <span><b>{refereeLabel}</b> decides the outcome</span>
+          <span><b>deadline</b> · {deadline}</span>
         </div>
-        <div>
-          <span>deadline</span>
-          <b>{days} days</b>
-        </div>
-        <div>
-          <span>if you hit it</span>
-          <b>{fmtNum(refund)} {currency} back</b>
-        </div>
-        <div>
-          <span>if you fold</span>
-          <b>referee gets {fmtNum(refund)} {currency}</b>
-        </div>
-      </div>
+        {proof.trim() ? <p>{proof}</p> : null}
+      </article>
     </div>
   );
 }
 
-function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id: bigint) => void; initialReferee?: string; contacts: Friend[] }) {
+function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (key: string) => void; initialReferee?: string; contacts: Friend[] }) {
   const [step, setStep] = useState(0);
   const [goal, setGoal] = useState('');
   const [proof, setProof] = useState('');
   const [referee, setReferee] = useState(initialReferee ?? '');
   const [stake, setStake] = useState('');
   const [currency, setCurrency] = useState<StakeCurrency>('ETH');
-  const [intensity, setIntensity] = useState('');
   const [days, setDays] = useState(7);
   const [error, setError] = useState('');
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [resolvedReferee, setResolvedReferee] = useState<`0x${string}` | null>(null);
+  const isMockBuilder = import.meta.env.DEV && new URLSearchParams(window.location.search).get('mock') === '1';
   const { writeContractAsync, isPending } = useWriteContract();
   const { chainId, address } = useAccount();
   const { switchChain } = useSwitchChain();
   const isBase = chainId === base.id;
   const onTestnet = chainId === baseSepolia.id;
-  const localUsdcPreview = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  const isLocal = chainId === localAnvil.id;
+  const v2Live = COMMITMENT_V2_ADDRESS !== ZERO_ADDRESS;
+  const usdcEnabled = isMockBuilder || isLocal || (isBase && v2Live);
   const publicClient = usePublicClient();
 
-  const stepsLabel = ['promise', 'stake', 'friend', 'proof', 'confirm'];
+  const stepsLabel = ['promise', 'stake', 'accountability', 'review'];
+  const progressLabel = `${stepsLabel[step]} · ${step + 1} of ${stepsLabel.length}`;
   const goalText = `${goal.trim()}\n\nProof standard: ${proof.trim()}`;
 
   const refereeResult = (() => {
@@ -859,10 +966,8 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
       ? goal.trim().length > 0
       : step === 1
         ? parseFloat(stake) >= (currency === 'ETH' ? 0.001 : 1)
-      : step === 2
-        ? refereeResult.ok && !refereeResult.ensOnly
-        : step === 3
-          ? proof.trim().length > 0
+        : step === 2
+          ? refereeResult.ok && !refereeResult.ensOnly
           : true;
 
   const submittingRef = useRef(false);
@@ -872,12 +977,21 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
     setError('');
     setSubmitting(true);
     submittingRef.current = true;
-    const confirmCreated = async (before: bigint): Promise<bigint | null> => {
+    const v2Live = COMMITMENT_V2_ADDRESS !== ZERO_ADDRESS;
+    const v2Chain = isLocal ? LOCAL_COMMITMENT_V2_ADDRESS : COMMITMENT_V2_ADDRESS;
+    const v2Abi = commitmentV2Abi;
+    const usdcToken = isLocal ? LOCAL_USDC_ADDRESS : USDC_ADDRESS;
+    const createSource: GoalSource = currency === 'USDC' ? 'v2' : 'v1';
+    const confirmCreated = async (
+      before: bigint,
+      contract: `0x${string}`,
+      abi: typeof commitmentAbi | typeof commitmentV2Abi,
+    ): Promise<bigint | null> => {
       for (let i = 0; i < 15; i++) {
         try {
           const now = (await publicClient!.readContract({
-            address: COMMITMENT_ADDRESS,
-            abi: commitmentAbi,
+            address: contract,
+            abi,
             functionName: 'nextId',
           })) as bigint;
           if (now > before) return now - 1n;
@@ -889,21 +1003,27 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
       return null;
     };
     try {
-      if (chainId !== base.id && chainId !== baseSepolia.id) {
+      const amt = Number(stake);
+      if (currency === 'USDC') {
+        if (isLocal || (isBase && v2Live)) {
+          /* ok — local mock or live V2 */
+        } else if (isBase && !v2Live) {
+          setError('USDC asserts aren\'t live yet — the V2 contract isn\'t deployed. Pick ETH for now.');
+          return;
+        } else {
+          setError('USDC asserts run on Base mainnet (or Anvil Local while testing). Switch your wallet.');
+          return;
+        }
+      } else if (chainId !== base.id && chainId !== baseSepolia.id) {
         setError('switch your wallet to base before creating.');
         return;
       }
-      const amt = Number(stake);
-      if (currency === 'USDC') {
-        setError('USDC is local UI preview only right now — V2 contract wiring is next.');
+      if (!amt || amt < (currency === 'USDC' ? 1 : 0.001)) {
+        setError(currency === 'USDC' ? 'stake must be at least 1 USDC.' : 'stake must be at least 0.001 ETH.');
         return;
       }
-      if (!amt || amt < 0.001) {
-        setError('stake must be at least 0.001 ETH.');
-        return;
-      }
-      if (amt > 5) {
-        setError('stake can\'t exceed 5 ETH.');
+      if (amt > (currency === 'USDC' ? 5000 : 5)) {
+        setError(currency === 'USDC' ? 'stake can\'t exceed 5000 USDC.' : 'stake can\'t exceed 5 ETH.');
         return;
       }
       if (goalText.length > 280) {
@@ -914,12 +1034,19 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
         setError('referee can\'t be your own wallet.');
         return;
       }
+      if (isMockBuilder) {
+        await new Promise((r) => setTimeout(r, 550));
+        onCreated(goalKey(1n, currency === 'USDC' ? 'v2' : 'v1'));
+        return;
+      }
       const deadline = BigInt(Math.floor(Date.now() / 1000) + days * 86400);
+      const createAddress = currency === 'USDC' ? v2Chain : COMMITMENT_ADDRESS;
+      const createAbi = currency === 'USDC' ? v2Abi : commitmentAbi;
       let before = 0n;
       try {
         before = (await publicClient!.readContract({
-          address: COMMITMENT_ADDRESS,
-          abi: commitmentAbi,
+          address: createAddress,
+          abi: createAbi,
           functionName: 'nextId',
         })) as bigint;
       } catch {
@@ -928,19 +1055,67 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
 
       let gh: `0x${string}` | undefined;
       try {
-        gh = await writeContractAsync({
-          address: COMMITMENT_ADDRESS,
-          abi: commitmentAbi,
-          functionName: 'createGoal',
-          args: [goalText, refereeResult.addr!, deadline],
-          value: parseUnits(stake, 18),
-        });
+        if (currency === 'USDC') {
+          const stakeAmount = parseUnits(stake, 6);
+          const owner = address!;
+          const balance = (await publicClient!.readContract({
+            address: usdcToken,
+            abi: erc20TestAbi,
+            functionName: 'balanceOf',
+            args: [owner],
+          })) as bigint;
+          if (isLocal && balance < stakeAmount) {
+            const mintHash = await writeContractAsync({
+              chainId: localAnvil.id,
+              address: LOCAL_USDC_ADDRESS,
+              abi: erc20TestAbi,
+              functionName: 'mint',
+              args: [owner, stakeAmount - balance],
+            });
+            await waitForTx(mintHash, localAnvil.id);
+          }
+          if (balance < stakeAmount && !isLocal) {
+            setError(`you need ${stake} USDC in your wallet to make this assert. go swap or bridge some, then try again.`);
+            return;
+          }
+          const allowance = (await publicClient!.readContract({
+            address: usdcToken,
+            abi: erc20TestAbi,
+            functionName: 'allowance',
+            args: [owner, createAddress],
+          })) as bigint;
+          if (allowance < stakeAmount) {
+            const approveHash = await writeContractAsync({
+              chainId,
+              address: usdcToken,
+              abi: erc20TestAbi,
+              functionName: 'approve',
+              args: [createAddress, stakeAmount],
+            });
+            await waitForTx(approveHash, chainId);
+          }
+          gh = await writeContractAsync({
+            chainId,
+            address: createAddress,
+            abi: commitmentV2Abi,
+            functionName: 'createGoalWithToken',
+            args: [goalText, refereeResult.addr!, deadline, usdcToken, stakeAmount],
+          });
+        } else {
+          gh = await writeContractAsync({
+            address: COMMITMENT_ADDRESS,
+            abi: commitmentAbi,
+            functionName: 'createGoal',
+            args: [goalText, refereeResult.addr!, deadline],
+            value: parseUnits(stake, 18),
+          });
+        }
       } catch (e: any) {
         // the tx may have landed anyway (stale wallet prompt / broadcast race) —
         // confirm onchain before blaming the user
-        const landed = await confirmCreated(before);
+        const landed = await confirmCreated(before, createAddress, createAbi);
         if (landed !== null) {
-          onCreated(landed);
+          onCreated(goalKey(landed, createSource));
           return;
         }
         const code = e?.cause?.code ?? e?.code;
@@ -956,7 +1131,7 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
 
       setTxHash(gh);
       try {
-        await waitForTx(gh);
+        await waitForTx(gh, currency === 'USDC' ? chainId : undefined);
       } catch {
         /* receipt wait can time out even when the tx already mined — confirm below */
       }
@@ -964,9 +1139,9 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
       // pin the created id from the event log
       try {
         const receipt = await publicClient!.getTransactionReceipt({ hash: gh });
-        const ev = getAbiItem({ abi: commitmentAbi, name: 'Created' });
+        const ev = getAbiItem({ abi: createAbi, name: 'Created' });
         const logs = await publicClient!.getLogs({
-          address: COMMITMENT_ADDRESS,
+          address: createAddress,
           event: ev,
           fromBlock: receipt.blockNumber,
           toBlock: receipt.blockNumber,
@@ -974,14 +1149,14 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
         const created = logs.find((l) => l.transactionHash === gh);
         const args = created?.args as CreatedArgs | undefined;
         if (args?.id) {
-          onCreated(args.id);
+          onCreated(goalKey(args.id, createSource));
           return;
         }
       } catch {
         /* non-fatal */
       }
-      const createdId = await confirmCreated(before);
-      onCreated(createdId ?? 0n);
+      const createdId = await confirmCreated(before, createAddress, createAbi);
+      onCreated(createdId !== null ? goalKey(createdId, createSource) : '0');
     } finally {
       setSubmitting(false);
       submittingRef.current = false;
@@ -997,12 +1172,19 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
       }}
     >
       <div className="wizard-head">
+        <span className="wizard-progress-label">{progressLabel}</span>
         <h2>new assert</h2>
         <div className="network-chip-row">
           {onTestnet ? (
             <span className="network-chip testnet">base sepolia · testnet</span>
+          ) : isLocal ? (
+            <span className="network-chip testnet">anvil · local</span>
           ) : isBase ? (
             <span className="network-chip mainnet">base · mainnet</span>
+          ) : usdcEnabled && currency === 'USDC' && !isBase ? (
+            <button type="button" className="network-chip switch" onClick={() => switchChain({ chainId: localAnvil.id })}>
+              switch to anvil ↻
+            </button>
           ) : (
             <button type="button" className="network-chip switch" onClick={() => switchChain({ chainId: base.id })}>
               switch to base ↻
@@ -1026,23 +1208,29 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
         ) : null}
       </div>
 
-      {step === 0 && <Step1Goal goal={goal} setGoal={setGoal} />}
+      {step === 0 && <Step1Goal goal={goal} setGoal={setGoal} proof={proof} setProof={setProof} />}
       {step === 1 && (
         <Step3Stake
           stake={stake}
           setStake={setStake}
           currency={currency}
           setCurrency={setCurrency}
-          localUsdcPreview={localUsdcPreview}
+          usdcEnabled={usdcEnabled}
           days={days}
           setDays={setDays}
-          intensity={intensity}
-          setIntensity={setIntensity}
         />
       )}
-      {step === 2 && <Step2Referee value={referee} onChange={setReferee} onResolved={setResolvedReferee} friends={contacts} />}
-      {step === 3 && <Step4Proof proof={proof} setProof={setProof} />}
-      {step === 4 && <Step4Review goal={goal} proof={proof} referee={refereeResult.addr ?? referee} stake={stake} currency={currency} days={days} />}
+      {step === 2 && (
+        <Step2Referee
+          value={referee}
+          onChange={setReferee}
+          onResolved={setResolvedReferee}
+          friends={contacts}
+          proof={proof}
+          setProof={setProof}
+        />
+      )}
+      {step === 3 && <Step4Review goal={goal} proof={proof} referee={refereeResult.addr ?? referee} stake={stake} currency={currency} days={days} />}
 
       {error && <p className="muted" style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
       {submitting && !txHash && (
@@ -1064,7 +1252,7 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
         ) : (
           <span />
         )}
-        {step < 4 ? (
+        {step < 3 ? (
           <button
             type="button"
             className="btn-primary"
@@ -1074,9 +1262,12 @@ function CreateWizard({ onCreated, initialReferee, contacts }: { onCreated: (id:
             next →
           </button>
         ) : (
-          <button type="submit" className="btn-primary" disabled={!canNext || isPending || submitting}>
-            {submitting ? 'waiting for wallet…' : isPending ? 'locking…' : 'lock it in · assert it'}
-          </button>
+          <SlideToAssert
+            disabled={submitting || isPending}
+            processing={submitting || isPending}
+            error={error}
+            onComplete={submit}
+          />
         )}
       </div>
     </form>
@@ -1101,6 +1292,161 @@ function ConnectedIntro({ onStart, profile }: { onStart: () => void; profile: Us
       <button className="btn-primary intro-start intro-line intro-line-4" onClick={onStart}>
         enter assert →
       </button>
+    </section>
+  );
+}
+
+/* ---------------- entry scene (pre-auth) ---------------- */
+
+type EntryFloatSpec = {
+  icon: React.ReactNode;
+  cls: string;
+};
+
+function FloatAlarm() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className="entry-float-svg">
+      <rect x="10" y="18" width="28" height="22" rx="4" fill="#eef1ff" stroke="#405cff" strokeWidth="1.8" />
+      <circle cx="24" cy="29" r="7.5" fill="#fff" stroke="#405cff" strokeWidth="1.4" />
+      <line x1="24" y1="29" x2="24" y2="24.5" stroke="#405cff" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="24" y1="29" x2="27.5" y2="29" stroke="#405cff" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="13" cy="15" r="3.5" fill="#405cff" />
+      <circle cx="35" cy="15" r="3.5" fill="#405cff" />
+      <line x1="16.5" y1="15" x2="31.5" y2="15" stroke="#405cff" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="24" cy="10" r="1.5" fill="#405cff" />
+      <line x1="14" y1="40" x2="18" y2="37" stroke="#c5cffc" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="34" y1="40" x2="30" y2="37" stroke="#c5cffc" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function FloatDumbbell() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className="entry-float-svg">
+      <rect x="7" y="18" width="6" height="12" rx="2" fill="#405cff" />
+      <rect x="35" y="18" width="6" height="12" rx="2" fill="#405cff" />
+      <rect x="12" y="21" width="24" height="6" rx="2" fill="#eef1ff" stroke="#405cff" strokeWidth="1.2" />
+      <rect x="4" y="20" width="5" height="8" rx="1.5" fill="#2f46d6" />
+      <rect x="39" y="20" width="5" height="8" rx="1.5" fill="#2f46d6" />
+      <rect x="12.5" y="21.5" width="23" height="2.5" rx="1" fill="#fff" opacity="0.5" />
+    </svg>
+  );
+}
+
+function FloatBook() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className="entry-float-svg">
+      <path d="M24 14 C24 14 14 12 8 14 L8 38 C14 36 24 38 24 38 C24 38 34 36 40 38 L40 14 C34 12 24 14 24 14Z" fill="#eef1ff" stroke="#405cff" strokeWidth="1.6" />
+      <path d="M24 14 C24 14 14 12 8 14 L8 38 C14 36 24 38 24 38Z" fill="#f5f7ff" stroke="#405cff" strokeWidth="1.6" />
+      <line x1="13" y1="20" x2="20" y2="20.5" stroke="#405cff" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+      <line x1="13" y1="24" x2="19" y2="24.5" stroke="#405cff" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+      <line x1="13" y1="28" x2="18" y2="28.5" stroke="#405cff" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+      <line x1="28" y1="20" x2="35" y2="19.5" stroke="#405cff" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+      <line x1="28" y1="24" x2="34" y2="23.5" stroke="#405cff" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+    </svg>
+  );
+}
+
+function FloatRocket() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className="entry-float-svg">
+      <path d="M24 6 C24 6 18 16 18 26 L30 26 C30 16 24 6 24 6Z" fill="#eef1ff" stroke="#405cff" strokeWidth="1.6" />
+      <circle cx="24" cy="20" r="2.5" fill="#405cff" />
+      <path d="M18 26 L14 32 L18 30Z" fill="#405cff" />
+      <path d="M30 26 L34 32 L30 30Z" fill="#405cff" />
+      <rect x="20" y="26" width="8" height="4" rx="1" fill="#2f46d6" />
+      <path d="M21 30 L24 38 L27 30Z" fill="#c5cffc" />
+      <path d="M22.5 30 L24 35 L25.5 30Z" fill="#405cff" opacity="0.4" />
+    </svg>
+  );
+}
+
+function FloatShoe() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className="entry-float-svg">
+      <path d="M8 32 C8 32 8 26 14 24 C20 22 22 20 28 18 C34 16 38 17 40 20 C42 23 40 28 38 30 L10 34 C8 34 8 32 8 32Z" fill="#eef1ff" stroke="#405cff" strokeWidth="1.6" />
+      <path d="M10 34 L38 30 L39 33 C39 35 37 36 35 36 L12 36 C10 36 9 35 10 34Z" fill="#405cff" />
+      <circle cx="18" cy="26" r="1.2" fill="#405cff" opacity="0.4" />
+      <circle cx="22" cy="24.5" r="1.2" fill="#405cff" opacity="0.4" />
+      <circle cx="26" cy="23" r="1.2" fill="#405cff" opacity="0.4" />
+      <path d="M8 32 C8 32 10 28 16 26" stroke="#fff" strokeWidth="1" strokeLinecap="round" opacity="0.5" />
+    </svg>
+  );
+}
+
+function FloatHourglass() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className="entry-float-svg">
+      <rect x="14" y="6" width="20" height="3" rx="1.5" fill="#405cff" />
+      <rect x="14" y="39" width="20" height="3" rx="1.5" fill="#405cff" />
+      <path d="M16 9 L16 19 C16 24 21 26 24 26 C27 26 32 24 32 19 L32 9Z" fill="#eef1ff" stroke="#405cff" strokeWidth="1.4" />
+      <path d="M16 39 L16 29 C16 24 21 22 24 22 C27 22 32 24 32 29 L32 39Z" fill="#f5f7ff" stroke="#405cff" strokeWidth="1.4" />
+      <path d="M20 26 L24 38 L28 26Z" fill="#c5cffc" opacity="0.7" />
+      <ellipse cx="24" cy="20" rx="4" ry="1.5" fill="#405cff" opacity="0.35" />
+    </svg>
+  );
+}
+
+function FloatCoin() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className="entry-float-svg">
+      <ellipse cx="24" cy="24" rx="15" ry="16" fill="#eef1ff" stroke="#405cff" strokeWidth="1.6" />
+      <ellipse cx="24" cy="26" rx="15" ry="16" fill="#f5f7ff" stroke="#405cff" strokeWidth="0" opacity="0.5" />
+      <ellipse cx="24" cy="24" rx="15" ry="16" fill="none" stroke="#405cff" strokeWidth="1.6" />
+      <ellipse cx="24" cy="24" rx="11" ry="12" fill="none" stroke="#c5cffc" strokeWidth="1" />
+      <text x="24" y="29" textAnchor="middle" fill="#405cff" fontFamily="var(--font-display)" fontWeight="800" fontSize="14">A</text>
+      <ellipse cx="20" cy="17" rx="5" ry="2" fill="#fff" opacity="0.4" transform="rotate(-15 20 17)" />
+    </svg>
+  );
+}
+
+function FloatTarget() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" className="entry-float-svg">
+      <circle cx="24" cy="24" r="16" fill="#eef1ff" stroke="#405cff" strokeWidth="1.4" />
+      <circle cx="24" cy="24" r="11" fill="#f5f7ff" stroke="#c5cffc" strokeWidth="1.2" />
+      <circle cx="24" cy="24" r="6" fill="#fff" stroke="#405cff" strokeWidth="1.4" />
+      <circle cx="24" cy="24" r="2.5" fill="#405cff" />
+      <line x1="24" y1="6" x2="24" y2="10" stroke="#405cff" strokeWidth="1.4" strokeLinecap="round" />
+      <line x1="24" y1="38" x2="24" y2="42" stroke="#405cff" strokeWidth="1.4" strokeLinecap="round" />
+      <line x1="6" y1="24" x2="10" y2="24" stroke="#405cff" strokeWidth="1.4" strokeLinecap="round" />
+      <line x1="38" y1="24" x2="42" y2="24" stroke="#405cff" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const ENTRY_FLOATS: EntryFloatSpec[] = [
+  { icon: <FloatAlarm />, cls: 'ef-1' },
+  { icon: <FloatDumbbell />, cls: 'ef-2' },
+  { icon: <FloatBook />, cls: 'ef-3' },
+  { icon: <FloatRocket />, cls: 'ef-4' },
+  { icon: <FloatShoe />, cls: 'ef-5' },
+  { icon: <FloatHourglass />, cls: 'ef-6' },
+  { icon: <FloatCoin />, cls: 'ef-7' },
+  { icon: <FloatTarget />, cls: 'ef-8' },
+];
+
+function EntryScene() {
+  return (
+    <section className="entry-scene">
+      <div className="entry-orbit" aria-hidden="true">
+        {ENTRY_FLOATS.map((f) => (
+          <div key={f.cls} className={`entry-float ${f.cls}`}>
+            {f.icon}
+          </div>
+        ))}
+      </div>
+      <div className="entry-identity entry-rise-1">
+        <img className="entry-wordmark" src="/wordmark.png" alt="assert" />
+        <p className="entry-tagline">put anything on the line.</p>
+      </div>
+      <div className="entry-cta entry-rise-2">
+        <ConnectButton label="Get Started" />
+        <p className="entry-legal">
+          on your honor, onchain · <a className="legal-inline" href="#/terms">terms</a> ·{' '}
+          <a className="legal-inline" href="#/privacy">privacy</a>
+        </p>
+      </div>
     </section>
   );
 }
@@ -1142,9 +1488,9 @@ function activityFromGoals(
     const meta = st === 0 ? `waiting on ${refereeName}` : `referee: ${refereeName}`;
     const result =
       st === 2
-        ? `+${fmt(g.amount)} ETH kept`
+        ? `+${fmtAmount(g.amount, g.source, 3)} ${unitOf(g.source)} kept`
         : st === 3
-          ? `${fmt(g.amount)} ETH → referee`
+          ? `${fmtAmount(g.amount, g.source, 3)} ${unitOf(g.source)} → referee`
           : st === 4
             ? 'refunded'
             : undefined;
@@ -1156,7 +1502,7 @@ function activityFromGoals(
       badge,
       reaction: '0',
       result,
-      id: g.id.toString(),
+      id: goalKey(g.id, g.source),
       pfp: opts.profiles[g.creator]?.pfpUrl ?? '',
     };
   });
@@ -1223,7 +1569,166 @@ function ClockIcon() {
   );
 }
 
-function HomeAssertCard({ goal, status, profiles = {} }: { goal: CreatedArgs; status: number; profiles?: Record<string, UserProfile> }) {
+function CaretIcon({ up = false }: { up?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={up ? { transform: 'rotate(180deg)' } : undefined}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 12h15M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4.5 12.5l5 5 10-11" />
+    </svg>
+  );
+}
+
+function SlideToAssert({
+  disabled = false,
+  processing = false,
+  error = '',
+  onComplete,
+}: {
+  disabled?: boolean;
+  processing?: boolean;
+  error?: string;
+  onComplete: () => void;
+}) {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [p, setP] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [done, setDone] = useState(false);
+  const startX = useRef(0);
+  const startP = useRef(0);
+  const doneRef = useRef(false);
+  const completeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    doneRef.current = done;
+  }, [done]);
+
+  useEffect(
+    () => () => {
+      if (completeTimer.current) clearTimeout(completeTimer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (error && doneRef.current) {
+      doneRef.current = false;
+      setDone(false);
+      setP(0);
+    }
+  }, [error]);
+
+  const fireComplete = () => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    setDone(true);
+    setP(1);
+    setDragging(false);
+    try {
+      if (typeof navigator.vibrate === 'function') navigator.vibrate(20);
+    } catch {
+      /* unsupported */
+    }
+    completeTimer.current = setTimeout(onComplete, 140);
+  };
+
+  const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (disabled || doneRef.current) return;
+    startX.current = e.clientX;
+    startP.current = p;
+    setDragging(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging || trackRef.current == null) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const next = Math.min(1, Math.max(0, startP.current + (e.clientX - startX.current) / rect.width));
+    if (next >= 0.985) {
+      fireComplete();
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
+      return;
+    }
+    setP(next);
+  };
+
+  const onUp = () => {
+    if (!dragging) return;
+    setDragging(false);
+    setP((v) => {
+      if (v >= 0.9 && !doneRef.current) {
+        fireComplete();
+      }
+      return v >= 0.9 && !doneRef.current ? v : 0;
+    });
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (disabled || doneRef.current) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = Math.min(1, p + 0.08);
+      if (next >= 1) fireComplete();
+      else setP(next);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      setP((v) => Math.max(0, v - 0.08));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (p > 0) fireComplete();
+    }
+  };
+
+  const label = processing ? 'waiting for your wallet…' : done ? 'asserting…' : 'slide to assert →';
+
+  return (
+    <div
+      ref={trackRef}
+      role="slider"
+      tabIndex={disabled ? -1 : 0}
+      aria-label="slide to assert"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(p * 100)}
+      className={`slide-assert${done ? ' done' : ''}${processing ? ' processing' : ''}${dragging ? ' dragging' : ''}${disabled ? ' disabled' : ''}`}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={onUp}
+      onKeyDown={onKeyDown}
+    >
+      <span className="slide-assert-fill" style={{ width: `${p * 100}%` }} />
+      <span className="slide-assert-label">{label}</span>
+      <span
+        className="slide-assert-thumb"
+        style={{ left: `calc(${p * 100}% - ${p * 52}px)`, transition: dragging ? 'none' : undefined }}
+      >
+        {done ? <CheckIcon /> : <ArrowRightIcon />}
+      </span>
+    </div>
+  );
+}
+
+function HomeAssertCard({ goal, status, profiles = {}, compact = false, isOpen = false, onToggle }: { goal: CreatedArgs; status: number; profiles?: Record<string, UserProfile>; compact?: boolean; isOpen?: boolean; onToggle?: () => void }) {
   const { address } = useAccount();
   const cd = useCountdown(goal.deadline);
   const refereeName = profileName(goal.referee, profiles);
@@ -1232,6 +1737,28 @@ function HomeAssertCard({ goal, status, profiles = {} }: { goal: CreatedArgs; st
   const title = splitGoalText(goal.goalText).title;
   const label = status === 0 ? 'Pending' : 'Live';
   const live = status === 1;
+  const unit = unitOf(goal.source);
+  if (compact) {
+    return (
+      <article
+        className={`home-assert-compact${live ? ' live' : ''}${isOpen ? ' open' : ''}`}
+        role={onToggle ? 'button' : undefined}
+        tabIndex={onToggle ? 0 : undefined}
+        onClick={onToggle}
+        onKeyDown={onToggle ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } } : undefined}
+      >
+        <span className={`live-pill ${label.toLowerCase()}`}>{label}</span>
+        <div className="home-assert-compact-main">
+          <h3>{title}</h3>
+          <span className="home-assert-compact-sub">
+            {cd.expired ? 'referee calls it' : `${cd.out} left`}
+          </span>
+        </div>
+        <b className="home-assert-compact-amount">{fmtAmount(goal.amount, goal.source, 3)} {unit}</b>
+        {onToggle ? <span className="home-assert-caret"><CaretIcon up={isOpen} /></span> : null}
+      </article>
+    );
+  }
   return (
     <article className={`home-assert-card${live ? ' live' : ''}${isReferee ? ' referee' : ''}`}>
       <div className="assert-pass-top">
@@ -1242,7 +1769,7 @@ function HomeAssertCard({ goal, status, profiles = {} }: { goal: CreatedArgs; st
             you're the referee
           </span>
         )}
-        <b>{fmt(goal.amount)} ETH</b>
+        <b>{fmtAmount(goal.amount, goal.source, 3)} {unit}</b>
       </div>
       <h3>{title}</h3>
       <div className="home-assert-state">
@@ -1252,7 +1779,7 @@ function HomeAssertCard({ goal, status, profiles = {} }: { goal: CreatedArgs; st
             <>
               <span className="state-line">{isReferee ? 'you\'re refereeing this' : `${refereeName} is watching`}</span>
               <span className="state-sub">
-                {cd.expired ? 'time is up · referee calls it within 2 days' : `${cd.out} left`} · {isReferee ? 'you' : refereeName} takes {fmt(goal.amount)} ETH if they bail
+                {cd.expired ? 'time is up · referee calls it within 2 days' : `${cd.out} left`} · {isReferee ? 'you' : refereeName} takes {fmtAmount(goal.amount, goal.source, 3)} {unit} if they bail
               </span>
             </>
           ) : (
@@ -1264,10 +1791,10 @@ function HomeAssertCard({ goal, status, profiles = {} }: { goal: CreatedArgs; st
         </div>
       </div>
       <div className={`home-assert-actions${isCreator ? '' : ' single'}`}>
-        <a href={`#g/${goal.id.toString()}`} className="home-assert-action">View assert →</a>
+        <a href={`#g/${goalKey(goal.id, goal.source)}`} className="home-assert-action">View assert →</a>
         {isCreator ? (
           <a
-            href={assertShareHref({ id: goal.id, title, amount: goal.amount, status })}
+            href={assertShareHref({ id: goal.id, title, amount: goal.amount, status, source: goal.source })}
             className="home-assert-action share-action"
             target="_blank"
             rel="noreferrer"
@@ -1306,7 +1833,7 @@ function AssertsTab({
         </div>
         <div className="assert-card-list">
           {myGoals.length ? (
-            myGoals.map((g, i) => <GoalCard key={g.id.toString()} id={g.id.toString()} only={filter} profiles={profiles} fallback={{ goal: g, status: statuses[i]?.[6] ?? 0 }} readOnly={readOnly} />)
+            myGoals.map((g, i) => <GoalCard key={goalKey(g.id, g.source)} id={goalKey(g.id, g.source)} only={filter} profiles={profiles} fallback={{ goal: g, status: statuses[i]?.[6] ?? 0 }} readOnly={readOnly} />)
           ) : (
             <p className="empty-copy">nothing {filter.toLowerCase()} yet.</p>
           )}
@@ -1363,7 +1890,7 @@ function FriendsTab({
   const [addAddr, setAddAddr] = useState('');
   const [addError, setAddError] = useState('');
   const [requestError, setRequestError] = useState('');
-  const visibleRequests = requests.filter((r) => !dismissed.includes(r.id.toString()));
+  const visibleRequests = requests.filter((r) => !dismissed.includes(goalKey(r.id, r.source)));
   const [filter, setFilter] = useState('');
   const filteredContacts = contacts.filter(
     (a) => !hiddenFriends.includes(a.toLowerCase()) && (!filter || short(a, 4).toLowerCase().includes(filter.toLowerCase())),
@@ -1383,8 +1910,10 @@ function FriendsTab({
       setAddError('that doesn\'t look like a valid address.');
     }
   };
-  const accept = async (id: bigint) => {
-    const h = await writeContractAsync({ chainId: base.id, address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id], gas: ACCEPT_ROLE_GAS });
+  const accept = async (g: CreatedArgs) => {
+    const addressFor = g.source === 'v2' ? COMMITMENT_V2_ADDRESS : COMMITMENT_ADDRESS;
+    const abiFor = g.source === 'v2' ? commitmentV2Abi : commitmentAbi;
+    const h = await writeContractAsync({ chainId: base.id, address: addressFor, abi: abiFor, functionName: 'acceptRole', args: [g.id], gas: ACCEPT_ROLE_GAS });
     await waitForTx(h);
     window.location.reload();
   };
@@ -1399,8 +1928,8 @@ function FriendsTab({
       followed_goal_ids: followedIds,
     }).catch((error) => console.warn('Supabase preferences save failed', error));
   };
-  const dismiss = (id: bigint) => {
-    const next = [...dismissed, id.toString()];
+  const dismiss = (g: CreatedArgs) => {
+    const next = [...dismissed, goalKey(g.id, g.source)];
     setDismissed(next);
     persistPreferences(next, hiddenFriends);
   };
@@ -1408,12 +1937,12 @@ function FriendsTab({
     setRequestError('');
     try {
       const denial = await saveRefereeDenial({
-        goal_id: goal.id.toString(),
+        goal_id: goalKey(goal.id, goal.source),
         creator_wallet: goal.creator,
         referee_wallet: goal.referee,
       });
       onDenied(denial);
-      dismiss(goal.id);
+      dismiss(goal);
     } catch {
       setRequestError('could not notify them yet. try again in a minute.');
     }
@@ -1426,12 +1955,12 @@ function FriendsTab({
   };
   const friendDetail = (friendAddress: `0x${string}`) => {
     const together = myGoals.filter((g) => g.creator === friendAddress || g.referee === friendAddress);
-    const openEth = together.reduce((sum, g) => {
+    const openTotal = together.reduce((sum, g) => {
       const status = statuses[myGoals.indexOf(g)]?.[6];
-      return status === 0 || status === 1 ? sum + Number(formatEther(g.amount)) : sum;
+      return status === 0 || status === 1 ? sum + Number(formatUnits(g.amount, g.source === 'v2' ? 6 : 18)) : sum;
     }, 0);
     const assertCopy = `${together.length} assert${together.length === 1 ? '' : 's'} together`;
-    return openEth ? `${assertCopy} · ${openEth.toFixed(3).replace(/\.?0+$/, '')} ETH on the line` : assertCopy;
+    return openTotal ? `${assertCopy} · ${openTotal.toFixed(3).replace(/\.?0+$/, '')} on the line` : assertCopy;
   };
   useEffect(() => {
     if (!address) return;
@@ -1469,20 +1998,20 @@ function FriendsTab({
         {visibleRequests.length ? (
           <div className="friend-requests">
             {visibleRequests.map((g) => (
-              <div className="friend-card-wrap request-card" key={g.id.toString()}>
+              <div className="friend-card-wrap request-card" key={goalKey(g.id, g.source)}>
                 <div className="friend-card">
                   <MiniAvatar name={short(g.creator, 4)} />
                   <div>
                     <h3>{short(g.creator, 4)} called you in</h3>
                     <p>{g.goalText}</p>
-                    <b>{fmt(g.amount)} ETH</b>
+                    <b>{fmtAmount(g.amount, g.source, 3)} {unitOf(g.source)}</b>
                   </div>
                 </div>
                 <div className="friend-bubble request-actions" role="group">
-                  <button type="button" className="btn green" onClick={() => accept(g.id)} disabled={isPending}>
+                  <button type="button" className="btn green" onClick={() => accept(g)} disabled={isPending}>
                     {isPending ? 'accepting…' : 'accept role'}
                   </button>
-                  <a href={`#g/${g.id.toString()}`} className="btn ghost view-assert">view assert →</a>
+                  <a href={`#g/${goalKey(g.id, g.source)}`} className="btn ghost view-assert">view assert →</a>
                   <button type="button" className="btn ghost" onClick={() => deny(g)} disabled={isPending}>
                     deny request
                   </button>
@@ -1609,8 +2138,10 @@ function RefereeRequestNotices({
 }) {
   const { writeContractAsync, isPending } = useWriteContract();
   const [error, setError] = useState('');
-  const accept = async (id: bigint) => {
-    const h = await writeContractAsync({ chainId: base.id, address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'acceptRole', args: [id], gas: ACCEPT_ROLE_GAS });
+  const accept = async (g: CreatedArgs) => {
+    const addressFor = g.source === 'v2' ? COMMITMENT_V2_ADDRESS : COMMITMENT_ADDRESS;
+    const abiFor = g.source === 'v2' ? commitmentV2Abi : commitmentAbi;
+    const h = await writeContractAsync({ chainId: base.id, address: addressFor, abi: abiFor, functionName: 'acceptRole', args: [g.id], gas: ACCEPT_ROLE_GAS });
     await waitForTx(h);
     window.location.reload();
   };
@@ -1618,7 +2149,7 @@ function RefereeRequestNotices({
     setError('');
     try {
       const denial = await saveRefereeDenial({
-        goal_id: goal.id.toString(),
+        goal_id: goalKey(goal.id, goal.source),
         creator_wallet: goal.creator,
         referee_wallet: goal.referee,
       });
@@ -1634,20 +2165,20 @@ function RefereeRequestNotices({
       {goals.map((g) => {
         const { title } = splitGoalText(g.goalText);
         return (
-          <div className="friend-card-wrap request-card" key={`request-${g.id.toString()}`}>
+          <div className="friend-card-wrap request-card" key={`request-${goalKey(g.id, g.source)}`}>
             <div className="friend-card">
               <MiniAvatar name={profileName(g.creator, profiles)} />
               <div>
                 <h3>{profileName(g.creator, profiles)} called you in</h3>
                 <p>{title}</p>
-                <b>{fmt(g.amount)} ETH waiting on you</b>
+                <b>{fmtAmount(g.amount, g.source, 3)} {unitOf(g.source)} waiting on you</b>
               </div>
             </div>
             <div className="friend-bubble request-actions" role="group">
-              <button type="button" className="btn green" onClick={() => accept(g.id)} disabled={isPending}>
+              <button type="button" className="btn green" onClick={() => accept(g)} disabled={isPending}>
                 {isPending ? 'accepting…' : 'accept role'}
               </button>
-              <a href={`#g/${g.id.toString()}`} className="btn ghost view-assert">view assert →</a>
+              <a href={`#g/${goalKey(g.id, g.source)}`} className="btn ghost view-assert">view assert →</a>
               <button type="button" className="btn ghost" onClick={() => deny(g)} disabled={isPending}>
                 deny request
               </button>
@@ -1664,8 +2195,10 @@ function RefereeRequestNotices({
 
 function DeniedRequests({ goals, profiles }: { goals: CreatedArgs[]; profiles: Record<string, UserProfile> }) {
   const { writeContractAsync, isPending } = useWriteContract();
-  const cancel = async (id: bigint) => {
-    const h = await writeContractAsync({ chainId: base.id, address: COMMITMENT_ADDRESS, abi: commitmentAbi, functionName: 'cancel', args: [id] });
+  const cancel = async (g: CreatedArgs) => {
+    const addressFor = g.source === 'v2' ? COMMITMENT_V2_ADDRESS : COMMITMENT_ADDRESS;
+    const abiFor = g.source === 'v2' ? commitmentV2Abi : commitmentAbi;
+    const h = await writeContractAsync({ chainId: base.id, address: addressFor, abi: abiFor, functionName: 'cancel', args: [g.id] });
     await waitForTx(h);
     window.location.reload();
   };
@@ -1675,20 +2208,20 @@ function DeniedRequests({ goals, profiles }: { goals: CreatedArgs[]; profiles: R
       {goals.map((g) => {
         const { title } = splitGoalText(g.goalText);
         return (
-          <div className="friend-card-wrap request-card denial-card" key={`denied-${g.id.toString()}`}>
+          <div className="friend-card-wrap request-card denial-card" key={`denied-${goalKey(g.id, g.source)}`}>
             <div className="friend-card">
               <MiniAvatar name={profileName(g.referee, profiles)} />
               <div>
                 <h3>{profileName(g.referee, profiles)} denied this assert</h3>
                 <p>{title}</p>
-                <b>{fmt(g.amount)} ETH ready to refund</b>
+                <b>{fmtAmount(g.amount, g.source, 3)} {unitOf(g.source)} ready to refund</b>
               </div>
             </div>
             <div className="friend-bubble request-actions" role="group">
-              <button type="button" className="btn green" onClick={() => cancel(g.id)} disabled={isPending}>
+              <button type="button" className="btn green" onClick={() => cancel(g)} disabled={isPending}>
                 {isPending ? 'cancelling…' : 'cancel · refund'}
               </button>
-              <a href={`#g/${g.id.toString()}`} className="btn ghost view-assert">view assert →</a>
+              <a href={`#g/${goalKey(g.id, g.source)}`} className="btn ghost view-assert">view assert →</a>
             </div>
           </div>
         );
@@ -1708,19 +2241,22 @@ function ProfileTab({
   address?: `0x${string}`;
   onSave: (profile: UserProfile) => void;
 }) {
-  const goals = useGoalsByIds(myGoals.map((g) => g.id));
+  const goals = useGoalsByIds(myGoals);
   const won = goals.filter((g) => g?.[6] === 2).length;
   const bailed = goals.filter((g) => g?.[6] === 3).length;
   const finished = won + bailed;
   const completion = finished ? `${Math.round((won / finished) * 100)}%` : '—';
+  const toUnits = (w: bigint, src: GoalSource) => Number(formatUnits(w, src === 'v2' ? 6 : 18));
   const kept = goals.reduce(
-    (sum, g) => sum + (g && g[6] === 2 ? Number(formatEther(g[3])) : 0),
+    (sum, g, i) => sum + (g && g[6] === 2 ? toUnits(g[3], myGoals[i]?.source ?? 'v1') : 0),
     0,
   );
   const lost = goals.reduce(
-    (sum, g) => sum + (g && g[6] === 3 ? Number(formatEther(g[3] - g[4])) : 0),
+    (sum, g, i) => sum + (g && g[6] === 3 ? toUnits(g[3], myGoals[i]?.source ?? 'v1') - toUnits(g[4], myGoals[i]?.source ?? 'v1') : 0),
     0,
   );
+  const keptUnit = myGoals.some((g) => g.source === 'v2') ? 'USDC' : 'ETH';
+  const lostUnit = keptUnit;
   const history = myGoals
     .map((g, i) => ({ goal: g, st: goals[i]?.[6] }))
     .filter((h) => h.st === 2 || h.st === 3 || h.st === 4)
@@ -1764,8 +2300,8 @@ function ProfileTab({
         <div className="profile-stats">
           <div><span>won</span><b>{won}</b></div>
           <div><span>completion</span><b>{completion}</b></div>
-          <div><span>kept</span><b>{kept ? `${kept.toFixed(2)} ETH` : '0 ETH'}</b></div>
-          <div><span>lost</span><b>{lost ? `${lost.toFixed(2)} ETH` : '0 ETH'}</b></div>
+          <div><span>kept</span><b>{kept ? `${kept.toFixed(2)} ${keptUnit}` : `0 ${keptUnit}`}</b></div>
+          <div><span>lost</span><b>{lost ? `${lost.toFixed(2)} ${lostUnit}` : `0 ${lostUnit}`}</b></div>
         </div>
       </section>
       <section className="tab-shell">
@@ -1774,7 +2310,7 @@ function ProfileTab({
         </div>
         {history.length ? (
           history.map(({ goal: g, st }) => (
-            <div className="history-row" key={g.id.toString()}>
+            <div className="history-row" key={goalKey(g.id, g.source)}>
               <span>{st === 2 ? 'WON' : st === 3 ? 'FOLDED' : 'CANCELLED'}</span>
               <p>{g.goalText}</p>
             </div>
@@ -1794,6 +2330,7 @@ function DisciplineHome({
   feed,
   friendCount,
   profiles = {},
+  contacts = [],
   onStart,
   onViewAsserts,
   onViewActivity,
@@ -1802,57 +2339,128 @@ function DisciplineHome({
   statuses: (GoalStruct | undefined)[];
   feed: SocialFeedItem[];
   friendCount: number;
-  profiles: Record<string, UserProfile>;
+  profiles?: Record<string, UserProfile>;
+  contacts?: `0x${string}`[];
   onStart: () => void;
   onViewAsserts: () => void;
   onViewActivity: () => void;
 }) {
+  const feedEmpty = feed.length === 0;
   const livePairs = myGoals
     .map((g, i) => ({ g, st: statuses[i]?.[6] }))
     .filter(({ st }) => st === 0 || st === 1);
-  const featured = livePairs
-    .slice()
-    .sort((a, b) => Number(a.g.deadline - b.g.deadline))[0];
   const active = livePairs.length;
-  const ethAtRisk = livePairs.reduce((sum, { g }) => sum + Number(formatEther(g.amount)), 0);
+  const ethAtRisk = livePairs.reduce((sum, { g }) => sum + (g.source === 'v1' ? Number(formatEther(g.amount)) : 0), 0);
+  const usdcAtRisk = livePairs.reduce((sum, { g }) => sum + (g.source === 'v2' ? Number(formatUnits(g.amount, 6)) : 0), 0);
+  const ethPriceUsd = useEthPriceUsd();
+  const usdValue = ethAtRisk * (ethPriceUsd ?? 0) + usdcAtRisk;
+  const atRiskLabel =
+    usdValue > 0
+      ? `$${usdValue.toFixed(2)}`
+      : ethAtRisk > 0 && ethPriceUsd == null
+        ? `${ethAtRisk.toFixed(3).replace(/\.?0+$/, '')} ETH`
+        : usdcAtRisk > 0
+          ? `${usdcAtRisk.toFixed(2).replace(/\.?0+$/, '')} USDC`
+          : '0';
+  const friendsActive = feed.filter((item) => item.who !== 'you' && (item.badge === 'live' || item.badge === 'day'));
+  const activity = feed.filter((item) => item.badge === 'won' || item.badge === 'folded');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   return (
     <div className="social-app">
-      <section className="home-hero-card">
-        <div>
-          <img className="home-card-wordmark" src="/wordmark.png" alt="Assert" />
-          <h2>{active ? `${active} assert${active === 1 ? '' : 's'} on the line.` : 'nothing on the line yet.'}</h2>
-          <p>
-            make one promise, put something behind it, and bring a friend in so it actually counts.
-          </p>
+      <section className="home-overview">
+        <img className="home-wordmark" src="/wordmark.png" alt="Assert" />
+        <div className="home-overview-head">
+          <h2>
+            {active ? `you've got ${active} assert${active === 1 ? '' : 's'} on the line.` : 'nothing on the line yet.'}
+          </h2>
+          <button className="home-overview-add" onClick={onStart} aria-label="create assert">+</button>
         </div>
-        <button className="home-plus" onClick={onStart} aria-label="create assert">+</button>
+        <div className="home-overview-stats">
+          <div className="home-stat">
+            <b>{active}</b>
+            <span>active</span>
+          </div>
+          <div className="home-stat">
+            <b>{atRiskLabel || '0'}</b>
+            <span>at stake</span>
+          </div>
+          <div className="home-stat">
+            <b>{friendCount || '0'}</b>
+            <span>friend{friendCount === 1 ? '' : 's'} watching</span>
+          </div>
+        </div>
       </section>
 
-      <div className="on-line-strip" aria-label="what's on the line">
-        <span className="line-stat"><b>{ethAtRisk ? `${ethAtRisk.toFixed(3).replace(/\.?0+$/, '')} ETH` : '0 ETH'}</b> on the line</span>
-        <span className="line-stat"><b>{active}</b> active</span>
-        <span className="line-stat"><b>{friendCount || '0'}</b> friend{friendCount === 1 ? '' : 's'} watching</span>
-      </div>
-
-      {featured ? (
-        <section className="active-carousel">
-          <div className="section-head clean">
-            <h2 className="section-title">active asserts</h2>
+      {livePairs.length ? (
+        <section className="home-active-zone">
+          <div className="home-section-head">
+            <h3 className="home-section-title">active asserts</h3>
             <button className="tiny-link" type="button" onClick={onViewAsserts}>view all</button>
           </div>
-          <HomeAssertCard goal={featured.g} status={featured.st ?? 0} profiles={profiles} />
+          <div className="home-active-list">
+            {livePairs.map(({ g, st }) => {
+              const key = goalKey(g.id, g.source);
+              const isOpen = expanded.has(key);
+              return (
+                <div key={key} className={`home-active-item${isOpen ? ' open' : ''}`}>
+                  <HomeAssertCard goal={g} status={st ?? 0} profiles={profiles} compact isOpen={isOpen} onToggle={() => toggle(key)} />
+                  {isOpen ? (
+                    <div className="home-active-detail">
+                      <HomeAssertCard goal={g} status={st ?? 0} profiles={profiles} />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
         </section>
       ) : null}
 
-      {feed.length ? (
-        <section className="social-feed-section">
-          <div className="section-head clean">
-            <h2 className="section-title">recent activity</h2>
-            <button className="tiny-link" type="button" onClick={onViewActivity}>see all →</button>
+      {!feedEmpty && ((friendsActive.length > 0 && myGoals.length > 0) || !livePairs.length) ? (
+        <section className="home-friends-zone">
+          <div className="home-section-head">
+            <span className="home-eyebrow">people</span>
+            <h3 className="home-section-title">friends are pushing</h3>
+            <button className="tiny-link" type="button" onClick={onViewActivity}>see all</button>
           </div>
-          <SocialFeed rows={feed.slice(0, 4)} />
+          <div className="home-friends-scroll">
+            {friendsActive.length
+              ? friendsActive.map((item) => (
+                  <div className="home-friend-chip" key={`${item.who}-${item.body}`}>
+                    {item.pfp ? (
+                      <img className="mini-avatar" src={item.pfp} alt={item.who} />
+                    ) : (
+                      <span className="mini-avatar">{item.who[0]}</span>
+                    )}
+                    <div>
+                      <b>{item.who}</b>
+                      <p>{item.body}</p>
+                    </div>
+                    <span className="home-friend-live">live</span>
+                  </div>
+                ))
+              : null}
+            {!friendsActive.length && contacts.length ? (
+              <p className="empty-copy">nobody is mid-assert right now.</p>
+            ) : null}
+          </div>
         </section>
       ) : null}
+
+      <section className="home-feed-zone">
+        <div className="home-section-head">
+          <h3 className="home-section-title">recent activity</h3>
+          <button className="tiny-link" type="button" onClick={onViewActivity}>see all →</button>
+        </div>
+        <SocialFeed rows={(activity.length === 0 ? feed : [...friendsActive, ...activity]).slice(0, 4)} />
+      </section>
     </div>
   );
 }
@@ -1869,47 +2477,112 @@ function WalletSettings() {
   );
 }
 
+function NavHomeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 11l8-6.5L20 11" />
+      <path d="M6 9.5V19h12V9.5" />
+    </svg>
+  );
+}
+
+function NavAssertsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 1v3M12 20v3M1 12h3M20 12h3" />
+    </svg>
+  );
+}
+
+function NavFriendsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9" cy="8" r="3.4" />
+      <path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5" />
+      <circle cx="17" cy="9" r="2.6" />
+      <path d="M17 14.5c2.5 0 3.5 2 3.7 4" />
+    </svg>
+  );
+}
+
+function NavYouIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4.5 21c0-4 3.4-6.5 7.5-6.5s7.5 2.5 7.5 6.5" />
+    </svg>
+  );
+}
+
 function BottomNav({ active, onSelect, pending }: { active: AppMode; onSelect: (mode: AppMode) => void; pending?: number }) {
-  const items: { label: string; mode: AppMode }[] = [
-    { label: 'Home', mode: 'home' },
-    { label: 'Asserts', mode: 'asserts' },
-    { label: '+', mode: 'builder' },
-    { label: 'Friends', mode: 'friends' },
-    { label: 'You', mode: 'you' },
+  const items: { label: string; mode: AppMode; Icon: () => React.ReactNode }[] = [
+    { label: 'Home', mode: 'home', Icon: NavHomeIcon },
+    { label: 'Asserts', mode: 'asserts', Icon: NavAssertsIcon },
+    { label: 'Friends', mode: 'friends', Icon: NavFriendsIcon },
+    { label: 'You', mode: 'you', Icon: NavYouIcon },
   ];
   return (
     <nav className="bottom-nav" aria-label="app navigation">
-      {items.map((item) => (
-        <button
-          key={item.mode}
-          className={`${item.mode === 'builder' ? 'nav-plus' : ''}${active === item.mode ? ' active' : ''}`}
-          onClick={() => onSelect(item.mode)}
-        >
-          {item.label}
-          {item.mode === 'friends' && pending ? <span className="nav-badge">{pending > 9 ? '9+' : pending}</span> : null}
-        </button>
-      ))}
+      {items.slice(0, 2).map((item) => {
+        const isActive = active === item.mode;
+        return (
+          <button
+            key={item.mode}
+            className={`nav-item${isActive ? ' active' : ''}`}
+            onClick={() => onSelect(item.mode)}
+          >
+            <span className="nav-icon">
+              <item.Icon />
+            </span>
+            {isActive ? <span className="nav-label">{item.label}</span> : null}
+            {item.mode === 'friends' && pending ? <span className="nav-badge">{pending > 9 ? '9+' : pending}</span> : null}
+          </button>
+        );
+      })}
+      <button className="nav-plus" onClick={() => onSelect('builder')} aria-label="create assert">+</button>
+      {items.slice(2).map((item) => {
+        const isActive = active === item.mode;
+        return (
+          <button
+            key={item.mode}
+            className={`nav-item${isActive ? ' active' : ''}`}
+            onClick={() => onSelect(item.mode)}
+          >
+            <span className="nav-icon">
+              <item.Icon />
+            </span>
+            {isActive ? <span className="nav-label">{item.label}</span> : null}
+            {item.mode === 'friends' && pending ? <span className="nav-badge">{pending > 9 ? '9+' : pending}</span> : null}
+          </button>
+        );
+      })}
     </nav>
   );
 }
 
 /* ---------------- share invite ---------------- */
 
-function ShareInvite({ id, referee: fallbackReferee, onClose }: { id: bigint; referee: string; onClose: () => void }) {
-  const link = `${window.location.origin}${window.location.pathname}#g/${id.toString()}`;
+function ShareInvite({ id, referee: fallbackReferee, onClose }: { id: string; referee: string; onClose: () => void }) {
+  const { source, id: rawId } = splitGoalKey(id);
+  const contract = source === 'v2' ? COMMITMENT_V2_ADDRESS : COMMITMENT_ADDRESS;
+  const abi = source === 'v2' ? commitmentV2Abi : commitmentAbi;
+  const link = `${window.location.origin}${window.location.pathname}#g/${id}`;
   const [copied, setCopied] = useState(false);
   const { data } = useReadContract({
     chainId: base.id,
-    address: COMMITMENT_ADDRESS,
-    abi: commitmentAbi,
+    address: contract,
+    abi,
     functionName: 'goals',
-    args: [id],
+    args: [rawId],
   });
-  const raw = data as GoalStruct | undefined;
+  const raw = source === 'v2' && COMMITMENT_V2_ADDRESS !== ZERO_ADDRESS ? (data ? v2ToGoalStruct(data as GoalStructV2) : undefined) : data as GoalStruct | undefined;
   const referee = (raw?.[1] as string | undefined) || fallbackReferee || '';
   const amount = raw?.[3];
   const title = splitGoalText(raw?.[2] ?? 'my assert').title;
   const hasReferee = referee.startsWith('0x') && referee !== '0x0';
+  const unit = unitOf(source);
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -1924,8 +2597,8 @@ function ShareInvite({ id, referee: fallbackReferee, onClose }: { id: bigint; re
         <p className="modal-sub locked-line fade-up fade-up-1">
           {amount !== undefined ? (
             <>
-              You staked <b>{fmt(amount)} ETH</b> into contract{' '}
-              <b title={COMMITMENT_ADDRESS}>{short(COMMITMENT_ADDRESS, 6)}</b> on Base.{' '}
+              You staked <b>{fmtAmount(amount, source, 3)} {unit}</b> into contract{' '}
+              <b title={contract}>{short(contract, 6)}</b> on Base.{' '}
             </>
           ) : null}
           <span className="muted">2% fee only applies when it resolves.</span>
@@ -1956,7 +2629,7 @@ function ShareInvite({ id, referee: fallbackReferee, onClose }: { id: bigint; re
         {amount !== undefined ? (
           <a
             className="btn-primary share-x-button fade-up fade-up-4"
-            href={assertShareHref({ id, title, amount, status: 0 })}
+            href={assertShareHref({ id: rawId, title, amount, status: 0, source })}
             target="_blank"
             rel="noreferrer"
           >
@@ -1996,14 +2669,18 @@ function GoalCard({
 }) {
   const { address } = useAccount();
   const { writeContractAsync, isPending } = useWriteContract();
+  const { source: idSource, id: rawId } = splitGoalKey(id);
+  const source = fallback?.goal.source ?? idSource;
+  const addressFor = source === 'v2' ? COMMITMENT_V2_ADDRESS : COMMITMENT_ADDRESS;
+  const abiFor = source === 'v2' ? commitmentV2Abi : commitmentAbi;
   const { data } = useReadContract({
     chainId: base.id,
-    address: COMMITMENT_ADDRESS,
-    abi: commitmentAbi,
+    address: addressFor,
+    abi: abiFor,
     functionName: 'goals',
-    args: [BigInt(id)],
+    args: [rawId],
   });
-  const raw = fallback ? toGoalStruct(fallback.goal, fallback.status) : data as GoalStruct | undefined;
+  const raw = fallback ? toGoalStruct(fallback.goal, fallback.status) : data && source === 'v2' && COMMITMENT_V2_ADDRESS !== ZERO_ADDRESS ? v2ToGoalStruct(data as GoalStructV2) : data as GoalStruct | undefined;
   const { out, expired } = useCountdown(raw?.[5]);
   const { expired: graceOver } = useCountdown(raw?.[5] !== undefined ? raw[5] + 172800n : 0n);
   if (!raw) return null;
@@ -2030,10 +2707,10 @@ function GoalCard({
   const run = async (functionName: 'acceptRole' | 'approve' | 'cancel' | 'claimReferee' | 'forfeit' | 'refundNoShow') => {
     const hash = await writeContractAsync({
       chainId: base.id,
-      address: COMMITMENT_ADDRESS,
-      abi: commitmentAbi,
+      address: addressFor,
+      abi: abiFor,
       functionName,
-      args: [BigInt(id)],
+      args: [rawId],
       ...(functionName === 'acceptRole' ? { gas: ACCEPT_ROLE_GAS } : {}),
     });
     await waitForTx(hash);
@@ -2052,7 +2729,7 @@ function GoalCard({
             </span>
           )}
         </span>
-        <b>{fmt(amount)} ETH</b>
+        <b>{fmtAmount(amount, source)} {unitOf(source)}</b>
       </div>
       <p className="goal-text">{title}</p>
       {focused && description && !compact ? <p className="goal-desc">{description}</p> : null}
@@ -2073,7 +2750,7 @@ function GoalCard({
                   ? 'referee never called it — stake returned.'
                   : expired
                     ? 'time is up · referee has 2 days to call it'
-                    : `${out} left`} · {isReferee ? `you take ${fmt(amount)} ETH if they bail` : `${profileName(referee, profiles)} takes ${fmt(amount)} ETH if you bail`}
+                    : `${out} left`} · {isReferee ? `you take ${fmtAmount(amount, source)} ${unitOf(source)} if they bail` : `${profileName(referee, profiles)} takes ${fmtAmount(amount, source)} ${unitOf(source)} if you bail`}
               </span>
             </>
           ) : status === 2 ? (
@@ -2098,25 +2775,25 @@ function GoalCard({
         <div className="outcome-split">
           <div className="outcome win">
             <span>you hit it</span>
-            <b>{fmt(refund)} back</b>
+            <b>{fmtAmount(refund, source)} {unitOf(source)} back</b>
           </div>
           <div className="outcome lose">
             <span>you miss</span>
-            <b>{fmt(refund)} to referee</b>
+            <b>{fmtAmount(refund, source)} {unitOf(source)} to referee</b>
           </div>
-          <div className="outcome fee">protocol fee {fmt(feeAmount)} ({Number((feeAmount * 10000n) / amount)} bps)</div>
+          <div className="outcome fee">protocol fee {fmtAmount(feeAmount, source)} {unitOf(source)} ({Number((feeAmount * 10000n) / amount)} bps)</div>
         </div>
       )}
       {(status === 0 || status === 1) && (
         <div className="assert-risk-strip detail-risk-strip">
-          <span>Bail → {isReferee ? 'you' : profileName(referee, profiles)} gets {fmt(refund)} ETH</span>
+          <span>Bail → {isReferee ? 'you' : profileName(referee, profiles)} gets {fmtAmount(refund, source)} {unitOf(source)}</span>
         </div>
       )}
       <div className="goal-actions">
         {isCreator ? (
           <a
             className="btn ghost share-x-action"
-            href={assertShareHref({ id, title, amount, status })}
+            href={assertShareHref({ id: rawId, title, amount, status, source })}
             target="_blank"
             rel="noreferrer"
           >
@@ -2182,72 +2859,6 @@ function GoalCard({
 }
 
 /* ---------------- landing ---------------- */
-
-function LandingNav() {
-  return (
-    <div className="landing-nav">
-      <img className="brand-wordmark" src="/wordmark.png" alt="assert" />
-      <ConnectButton label="Enter app →" />
-    </div>
-  );
-}
-
-function LandingAssertCard() {
-  return (
-    <img className="landing-phone fade-up fade-up-2" src="/assert-card.png" alt="Live Assert card for gym 4x this week" />
-  );
-}
-
-const LANDING_ACTIVITY = [
-  { who: 'Josh', body: 'completed Gym 4× this week', meta: 'Mia approved it · 20m ago', badge: 'WON' },
-  { who: 'Mia', body: 'put 0.03 ETH on reading daily', meta: 'deadline in 7 days', badge: 'LIVE' },
-  { who: 'Ade', body: 'locked 0.10 ETH on no nicotine', meta: 'Sam refereeing · day 5', badge: 'LIVE' },
-  { who: 'Liv', body: 'folded on her 6am run', meta: 'referee got paid', badge: 'FOLDED' },
-  { who: 'Noah', body: 'proved 5 deep work blocks', meta: 'stake returned', badge: 'WON' },
-];
-
-function LandingActivity() {
-  return (
-    <section id="people" className="landing-activity fade-up fade-up-3" aria-label="recent assert activity">
-      {LANDING_ACTIVITY.slice(0, 4).map((item, index) => (
-        <div className={`activity-row static floating-row row-${index + 1} ${item.badge.toLowerCase()}`} key={`${item.who}-${item.body}`}>
-          <div className="avatar">{item.who[0]}</div>
-          <div>
-            <p><b>{item.who}</b> <strong>{item.body}</strong></p>
-            <span>{item.meta}</span>
-          </div>
-          <div className="activity-side"><b>{item.badge}</b></div>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function LandingCardStack() {
-  return (
-    <div className="landing-card-stack">
-      <LandingAssertCard />
-    </div>
-  );
-}
-
-function LandingFinalCta() {
-  return (
-    <section className="landing-final fade-up fade-up-4">
-      <h2>Still sure?</h2>
-      <ConnectButton label="Assert it →" />
-      <div className="landing-footer">
-        <span>Assert</span>
-        <span>built on Base</span>
-        <span className="footer-legal">
-          <a href="#/terms">terms</a>
-          <span>·</span>
-          <a href="#/privacy">privacy</a>
-        </span>
-      </div>
-    </section>
-  );
-}
 
 type LegalSection = { heading: string; paras: string[] };
 
@@ -2398,60 +3009,6 @@ function LegalPage({ route }: { route: keyof typeof LEGAL }) {
   );
 }
 
-function LandingSubstance() {
-  return (
-    <section className="landing-substance" aria-label="how Assert works">
-      <div className="landing-step step-blue">
-        <div className="step-top">
-          <span className="step-id">
-            <span className="step-num">01</span>
-            <span className="step-label">promise</span>
-          </span>
-          <span className="step-icon-chip">
-            <svg className="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <circle cx="12" cy="12" r="8.5" />
-              <circle cx="12" cy="12" r="4.5" />
-              <circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none" />
-            </svg>
-          </span>
-        </div>
-        <p>say the thing you keep putting off. out loud.</p>
-      </div>
-      <div className="landing-step step-green">
-        <div className="step-top">
-          <span className="step-id">
-            <span className="step-num">02</span>
-            <span className="step-label">stake</span>
-          </span>
-          <span className="step-icon-chip">
-            <svg className="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
-              <ellipse cx="12" cy="7.6" rx="7" ry="4" />
-              <path d="M5 7.6v4.8c0 2.2 3.1 4 7 4s7-1.8 7-4V7.6" />
-              <path d="M5 12.4v4.8c0 2.2 3.1 4 7 4s7-1.8 7-4v-4.8" />
-            </svg>
-          </span>
-        </div>
-        <p>put real money behind your word. no takebacks.</p>
-      </div>
-      <div className="landing-step step-lavender">
-        <div className="step-top">
-          <span className="step-id">
-            <span className="step-num">03</span>
-            <span className="step-label">referee</span>
-          </span>
-          <span className="step-icon-chip">
-            <svg className="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3l8 3v5c0 4.6-3.2 8.7-8 10-4.8-1.3-8-5.4-8-10V6z" />
-              <path d="M9 12l2 2 4-4.5" />
-            </svg>
-          </span>
-        </div>
-        <p>your friend calls it when time is up. fair.</p>
-      </div>
-    </section>
-  );
-}
-
 /* ---------------- app ---------------- */
 
 export default function App() {
@@ -2581,7 +3138,7 @@ export default function App() {
   const myGoals = (allGoals ?? []).filter(
     (g) => address && (g.creator === address || g.referee === address),
   );
-  const chainMyStatuses = useGoalsByIds(myGoals.map((g) => g.id));
+  const chainMyStatuses = useGoalsByIds(myGoals);
   const myStatuses = isMock ? myGoals.map((g, i) => toGoalStruct(g, i === 0 ? 1 : 0)) : chainMyStatuses;
   useEffect(() => {
     if (!address || !hasSupabase) {
@@ -2606,7 +3163,7 @@ export default function App() {
   const deniedGoals = useMemo(() => {
     const rows = new Map(refereeDenials.map((d) => [d.goal_id, d]));
     return myGoals.filter((g, i) => {
-      const row = rows.get(g.id.toString());
+      const row = rows.get(goalKey(g.id, g.source));
       return Boolean(
         address &&
         g.creator.toLowerCase() === address.toLowerCase() &&
@@ -2625,7 +3182,7 @@ export default function App() {
     );
   }, [address, refereeDenials]);
   const refereeRequests = myGoals.filter(
-    (g, i) => g.referee === address && myStatuses[i]?.[6] === 0 && !deniedRequestIds.has(g.id.toString()),
+    (g, i) => g.referee === address && myStatuses[i]?.[6] === 0 && !deniedRequestIds.has(goalKey(g.id, g.source)),
   );
   const addRefereeDenial = (denial: StoredRefereeDenial) => {
     setRefereeDenials((current) => {
@@ -2648,7 +3205,7 @@ export default function App() {
       return isContact.has(g.creator.toLowerCase()) || isContact.has(g.referee.toLowerCase());
     });
   }, [allGoals, contacts, address]);
-  const circleStatuses = useGoalsByIds(circleGoals.map((g) => g.id));
+  const circleStatuses = useGoalsByIds(circleGoals);
   const activeCircleStatuses = isMock ? circleGoals.map((g, i) => toGoalStruct(g, i === 0 ? 1 : 0)) : circleStatuses;
   const feed = activityFromGoals(circleGoals, activeCircleStatuses, {
     me: address,
@@ -2708,8 +3265,8 @@ export default function App() {
       cancelled = true;
     };
   }, [address, contacts, appMode]);
-  const invoked = invited ? (allGoals ?? []).find((g) => g.id.toString() === invited) : undefined;
-  const invokedStatus = invoked ? myStatuses[myGoals.findIndex((g) => g.id === invoked.id)]?.[6] ?? 1 : 1;
+  const invoked = invited ? (allGoals ?? []).find((g) => goalKey(g.id, g.source) === invited) : undefined;
+  const invokedStatus = invoked ? myStatuses[myGoals.findIndex((g) => g.id === invoked.id && g.source === invoked.source)]?.[6] ?? 1 : 1;
 
   const [legalRoute, setLegalRoute] = useState<'terms' | 'privacy' | null>(() => {
     const m = window.location.hash.match(/^#\/(terms|privacy)$/);
@@ -2749,33 +3306,12 @@ export default function App() {
 
   return (
     <div className={`page${!isConnected ? ' landing-page' : ''}`}>
-      <div className="aurora" aria-hidden="true" />
-      <header>{!isConnected ? <LandingNav /> : null}</header>
-
       {!isConnected ? (
-        <>
-          <section className="hero landing-hero">
-            <div className="hero-inner landing-hero-inner">
-              <div className="landing-copy">
-                <h1 className="fade-up fade-up-1">assert it, or fold.</h1>
-                <p className="lead fade-up fade-up-2">Put money behind your word.</p>
-                <p className="hero-line fade-up fade-up-2">Your friend calls it.</p>
-                <div className="hero-actions fade-up fade-up-3">
-                  <ConnectButton label="Assert something →" />
-                </div>
-              </div>
-              <LandingCardStack />
-            </div>
-          </section>
-
-          <main className="landing-main">
-            <LandingActivity />
-            <LandingSubstance />
-            <LandingFinalCta />
-          </main>
-        </>
+        <EntryScene />
       ) : (
-        <main>
+        <>
+          <div className="aurora" aria-hidden="true" />
+          <main>
           <RefereeRequestNotices
             goals={refereeRequests}
             profiles={profiles}
@@ -2797,7 +3333,7 @@ export default function App() {
               {!onKnownChain && (
                 <div className="banner action-warning">switch to <b>base</b> before locking an assert.</div>
               )}
-              {isMock ? null : <CreateWizard key={draftReferee ?? 'empty-referee'} initialReferee={draftReferee} contacts={contactFriends} onCreated={(id) => setInviteId(id > 0n ? id.toString() : null)} />}
+              <CreateWizard key={draftReferee ?? 'empty-referee'} initialReferee={draftReferee} contacts={contactFriends} onCreated={(key) => setInviteId(key !== '0' ? key : null)} />
             </div>
           ) : appMode === 'asserts' ? (
             <AssertsTab myGoals={myGoals} profiles={profiles} statuses={myStatuses} readOnly={isMock} />
@@ -2826,6 +3362,7 @@ export default function App() {
               statuses={myStatuses}
               feed={feed}
               friendCount={contacts.length}
+              contacts={contacts}
               profiles={profiles}
               onStart={() => startBuilder()}
               onViewAsserts={() => selectMode('asserts')}
@@ -2834,22 +3371,22 @@ export default function App() {
           )}
           {inviteId ? (
             <ShareInvite
-              id={BigInt(inviteId)}
+              id={inviteId}
               referee={invoked?.referee ?? ''}
               onClose={() => setInviteId(null)}
             />
           ) : null}
-          {appMode !== 'intro' || invited ? <BottomNav active={appMode} onSelect={selectMode} pending={refereeRequests.length + deniedGoals.length} /> : null}
-        </main>
+          {(appMode !== 'intro' || invited) && appMode !== 'builder' ? <BottomNav active={appMode} onSelect={selectMode} pending={refereeRequests.length + deniedGoals.length} /> : null}
+          </main>
+          {isConnected ? (
+            <footer className="muted">
+              assert — on your honor, onchain. ·{' '}
+              <a className="legal-inline" href="#/terms">terms</a> ·{' '}
+              <a className="legal-inline" href="#/privacy">privacy</a>
+            </footer>
+          ) : null}
+        </>
       )}
-
-      {isConnected ? (
-        <footer className="muted">
-          assert — on your honor, onchain. ·{' '}
-          <a className="legal-inline" href="#/terms">terms</a> ·{' '}
-          <a className="legal-inline" href="#/privacy">privacy</a>
-        </footer>
-      ) : null}
     </div>
   );
 }

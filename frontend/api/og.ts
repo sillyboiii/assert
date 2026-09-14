@@ -1,9 +1,10 @@
 import sharp from 'sharp';
 import { existsSync, writeFileSync } from 'node:fs';
 import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
-import { createPublicClient, formatEther, http } from 'viem';
+import { createPublicClient, formatUnits, http } from 'viem';
 import { base } from 'viem/chains';
 import { commitmentAbi } from './_lib/commitment-abi.js';
+import { commitmentV2Abi } from './_lib/commitment-v2-abi.js';
 import { FONT_BASE64 } from './_lib/og-assets.js';
 import { ogTemplatePng } from './_lib/og-template.js';
 
@@ -41,20 +42,39 @@ function wrap(text: string, max = 27) {
 }
 
 async function readGoal(id: string) {
-  if (!/^\d+$/.test(id)) return null;
+  const source = id.startsWith('v2-') ? 'v2' : 'v1';
+  const rawId = id.startsWith('v2-') ? id.slice(3) : id;
+  if (!/^\d+$/.test(rawId)) return null;
+  const v2Address = process.env.COMMITMENT_V2_ADDRESS || process.env.VITE_COMMITMENT_V2_ADDRESS;
+  if (source === 'v2' && !v2Address) return null;
   try {
+    const address = source === 'v2' ? (v2Address as `0x${string}`) : COMMITMENT_ADDRESS;
+    const abi = source === 'v2' ? commitmentV2Abi : commitmentAbi;
     const result = await client.readContract({
-      address: COMMITMENT_ADDRESS,
-      abi: commitmentAbi,
+      address,
+      abi,
       functionName: 'goals',
-      args: [BigInt(id)],
-    }) as readonly [string, string, string, bigint, bigint, bigint, number];
-    if (result[0] === '0x0000000000000000000000000000000000000000') return null;
+      args: [BigInt(rawId)],
+    });
+    if (source === 'v2') {
+      const v2 = result as readonly [string, string, string, string, bigint, bigint, bigint, number];
+      if (v2[0] === '0x0000000000000000000000000000000000000000') return null;
+      return {
+        title: titleFromGoal(v2[3]),
+        amount: formatUnits(v2[4], 6),
+        unit: 'USDC',
+        deadline: new Date(Number(v2[6]) * 1000),
+        status: STATUS[Number(v2[7])] ?? 'ASSERTED',
+      };
+    }
+    const v1 = result as readonly [string, string, string, bigint, bigint, bigint, number];
+    if (v1[0] === '0x0000000000000000000000000000000000000000') return null;
     return {
-      title: titleFromGoal(result[2]),
-      amount: formatEther(result[3]),
-      deadline: new Date(Number(result[5]) * 1000),
-      status: STATUS[Number(result[6])] ?? 'ASSERTED',
+      title: titleFromGoal(v1[2]),
+      amount: formatUnits(v1[3], 18),
+      unit: 'ETH',
+      deadline: new Date(Number(v1[5]) * 1000),
+      status: STATUS[Number(v1[6])] ?? 'ASSERTED',
     };
   } catch {
     return null;
@@ -90,7 +110,7 @@ function roundedRect(ctx: ReturnType<ReturnType<typeof createCanvas>['getContext
   ctx.closePath();
 }
 
-function drawCard({ title, amount, due }: { title: string; amount: string; due: string }) {
+function drawCard({ title, amount, unit, due }: { title: string; amount: string; unit: string; due: string }) {
   ensureFont();
   const canvas = createCanvas(1200, 630);
   const ctx = canvas.getContext('2d');
@@ -142,7 +162,7 @@ function drawCard({ title, amount, due }: { title: string; amount: string; due: 
   ctx.fillStyle = '#081046';
   ctx.font = '900 23px "Plus Jakarta Sans"';
   ctx.textAlign = 'left';
-  ctx.fillText(`${amount} ETH`, 164, 49);
+  ctx.fillText(`${amount} ${unit}`, 164, 49);
 
   ctx.fillStyle = '#071044';
   ctx.font = '900 30px "Plus Jakarta Sans"';
@@ -162,11 +182,10 @@ export default async function handler(req: { query?: { id?: string } }, res: {
 }) {
   const goal = await readGoal(String(req.query?.id ?? ''));
   const title = goal?.title ?? 'wake up before 7am every day';
-  const lines = wrap(title);
   const due = goal?.deadline
     ? goal.deadline.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toLowerCase()
     : 'soon';
-  const card = drawCard({ title, amount: goal?.amount ?? '0.001', due });
+  const card = drawCard({ title, amount: goal?.amount ?? (goal?.unit === 'USDC' ? '1' : '0.001'), unit: goal?.unit ?? 'ETH', due });
   const cleaned = await readCleanedTemplate();
   const image = await sharp(cleaned)
     .resize(1200, 630, { fit: 'contain', background: '#f8fbff' })

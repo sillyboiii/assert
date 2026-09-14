@@ -1,6 +1,7 @@
-import { createPublicClient, formatEther, http } from 'viem';
+import { createPublicClient, formatUnits, http } from 'viem';
 import { base } from 'viem/chains';
 import { commitmentAbi } from './_lib/commitment-abi.js';
+import { commitmentV2Abi } from './_lib/commitment-v2-abi.js';
 
 const COMMITMENT_ADDRESS = '0x79E76B56318905E9A359E0Bda48816B47A6aB607';
 
@@ -10,6 +11,7 @@ type Goal = {
   title: string;
   amount: bigint;
   status: number;
+  source: 'v1' | 'v2';
 };
 
 type QueryValue = string | string[] | undefined;
@@ -37,16 +39,28 @@ function titleFromGoal(text: string) {
 }
 
 async function readGoal(id: string): Promise<Goal | null> {
-  if (!/^\d+$/.test(id)) return null;
+  const source = id.startsWith('v2-') ? ('v2' as const) : ('v1' as const);
+  const rawId = id.startsWith('v2-') ? id.slice(3) : id;
+  if (!/^\d+$/.test(rawId)) return null;
+  const v2Address = process.env.COMMITMENT_V2_ADDRESS || process.env.VITE_COMMITMENT_V2_ADDRESS;
+  if (source === 'v2' && !v2Address) return null;
   try {
+    const address = source === 'v2' ? (v2Address as `0x${string}`) : COMMITMENT_ADDRESS;
+    const abi = source === 'v2' ? commitmentV2Abi : commitmentAbi;
     const result = await client.readContract({
-      address: COMMITMENT_ADDRESS,
-      abi: commitmentAbi,
+      address,
+      abi,
       functionName: 'goals',
-      args: [BigInt(id)],
-    }) as readonly [string, string, string, bigint, bigint, bigint, number];
-    if (result[0] === '0x0000000000000000000000000000000000000000') return null;
-    return { title: titleFromGoal(result[2]), amount: result[3], status: Number(result[6]) };
+      args: [BigInt(rawId)],
+    });
+    if (source === 'v2') {
+      const v2 = result as readonly [string, string, string, string, bigint, bigint, bigint, number];
+      if (v2[0] === '0x0000000000000000000000000000000000000000') return null;
+      return { title: titleFromGoal(v2[3]), amount: v2[4], status: Number(v2[7]), source: 'v2' };
+    }
+    const v1 = result as readonly [string, string, string, bigint, bigint, bigint, number];
+    if (v1[0] === '0x0000000000000000000000000000000000000000') return null;
+    return { title: titleFromGoal(v1[2]), amount: v1[3], status: Number(v1[6]), source: 'v1' };
   } catch {
     return null;
   }
@@ -61,7 +75,7 @@ export default async function handler(req: { query?: Record<string, QueryValue>;
   const origin = `https://${host}`;
   const goal = await readGoal(id);
   const title = goal?.title ?? 'I just made an assert';
-  const amount = goal ? `${formatEther(goal.amount)} ETH` : 'real stakes';
+  const amount = goal ? `${formatUnits(goal.amount, goal.source === 'v2' ? 6 : 18)} ${goal.source === 'v2' ? 'USDC' : 'ETH'}` : 'real stakes';
   const pageTitle = `Assert: ${title}`;
   const description = `Someone put ${amount} behind their word on Assert.`;
   const image = `${origin}/api/og?id=${encodeURIComponent(id)}&v=template-restored`;
